@@ -11,6 +11,7 @@ import { useCan } from '@/lib/permissions';
 import { generateBarcode } from '@/lib/format';
 import { logAudit } from '@/lib/audit';
 import { useGuidedWorkflow } from '@/core/guard';
+import { APP_ROUTES } from '@/core/navigation/routes';
 import { useUserBranches } from '@/hooks/useUserBranches';
 import type { Category, Product } from '@/lib/types';
 
@@ -126,7 +127,7 @@ export function ProductSetupWizardPage() {
       if (guidedContext?.missingStep.key.includes('product')) {
         completePrerequisiteAndReturn();
       } else {
-        navigate('/products');
+        navigate(APP_ROUTES.products);
       }
     } catch (error) {
       show(error instanceof Error ? error.message : String(error), 'error');
@@ -143,7 +144,7 @@ export function ProductSetupWizardPage() {
           ? 'إنشاء المنتج فقط. الوحدات والمكونات والوصفات تُدار من شاشاتها المستقلة.'
           : 'Create the product only. Units, components and recipes are managed in their dedicated screens.'}
         actions={
-          <Button variant="outline" size="sm" onClick={() => navigate('/products')}>
+          <Button variant="outline" size="sm" onClick={() => navigate(APP_ROUTES.products)}>
             <ChevronLeft className="w-4 h-4" />
             {isAr ? 'العودة للمنتجات' : 'Back to products'}
           </Button>
@@ -210,7 +211,7 @@ export function ProductSetupWizardPage() {
         </div>
 
         <div className="flex justify-end gap-2 mt-6">
-          <Button variant="outline" onClick={() => navigate('/products')}>{t('cancel')}</Button>
+          <Button variant="outline" onClick={() => navigate(APP_ROUTES.products)}>{t('cancel')}</Button>
           <Button onClick={save} disabled={saving || branchesLoading || accessibleBranches.length === 0}>
             <PackagePlus className="w-4 h-4" />
             {saving ? (isAr ? 'جارٍ الحفظ...' : 'Saving...') : t('save')}
