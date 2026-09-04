@@ -300,7 +300,7 @@ Every branch below was compared against `development/master-log2` (unique-commit
 3. `scripts/db/check-production-parity.js` + `.github/workflows/deploy.yml` parity job: the deploy chain is now `verify -> db -> e2e -> parity -> deploy`. The parity job probes the **Production** PostgREST schema cache with the exact RPC calls (name + `p_` params from `src/api/modules.ts`) and `supabase.from()` table reads from `src`. Any 404 PGRST202/PGRST205 aborts the chain — the frontend cannot be published ahead of the database again. (Only ever probes; never mutates Production.)
 
 ### PARITY GATE RESULT (as of this record)
-- 90 RPCs and 38 tables probed against `https://lwnsdsncmlsroiswgoga.supabase.co`.
+- 90 RPCs and 38 tables probed against `https://cuitndfayupfysejlpda.supabase.co`.
 - **33 RPCs missing** (stock valuation & summary, costing overview/product detail/cost history/supplier price impact/order margin, expiring batches, low-stock alerts/summary, add_inventory_batch, the full stock-count lifecycle, the full procurement chain create_purchase_request..get_supplier_evaluation, register_branch).
 - **2 tables missing**: `purchase_requests`, `purchase_request_items`.
 - The gate correctly FAILS today: Production is behind the frontend and must NOT be published to until migrated.

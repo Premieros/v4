@@ -2,7 +2,7 @@
 -- PREMIER / JOHN-S POS & ERP - COMPLETE DATABASE SCHEMA & RPCS
 -- Consolidated Build Script generated on 2026-09-01T12:55:33.840Z
 -- Contains all 115 migrations in canonical order
--- Target Supabase URL: https://azzdesuowpdcoflmyezn.supabase.co
+-- Target Supabase URL: https://cuitndfayupfysejlpda.supabase.co
 -- ============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
