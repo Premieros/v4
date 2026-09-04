@@ -9,11 +9,13 @@ export type { Role };
  * DB-backed permission map. Permission resolution must fail closed when that
  * map is unavailable.
  */
-
 export type Permission =
   | 'dashboard.view'
   | 'pos.sell'
+  | 'pos.order.create' | 'pos.order.edit' | 'pos.order.hold' | 'pos.order.send_kitchen' | 'pos.order.cancel'
+  | 'pos.payment.collect'
   | 'pos.discount' | 'pos.change_price' | 'pos.reprint'
+  | 'pos.approve.discount' | 'pos.approve.reprint' | 'pos.approve.cancel' | 'pos.approve.void'
   | 'sales.print' | 'sales.export'
   | 'purchases.print'
   | 'products.print' | 'products.export' | 'products.import'
@@ -33,6 +35,7 @@ export type Permission =
   | 'raw_materials.view' | 'raw_materials.manage'
   | 'recipes.view' | 'recipes.manage'
   | 'production.view' | 'production.manage' | 'production.waste'
+  | 'waste.view' | 'waste.create' | 'waste.approve'
   | 'warehouses.view' | 'warehouses.manage'
   | 'customers.view' | 'customers.manage'
   | 'suppliers.view' | 'suppliers.manage'
@@ -52,7 +55,10 @@ export type Permission =
 export const ALL_PERMISSIONS: Permission[] = [
   'dashboard.view',
   'pos.sell',
+  'pos.order.create', 'pos.order.edit', 'pos.order.hold', 'pos.order.send_kitchen', 'pos.order.cancel',
+  'pos.payment.collect',
   'pos.discount', 'pos.change_price', 'pos.reprint',
+  'pos.approve.discount', 'pos.approve.reprint', 'pos.approve.cancel', 'pos.approve.void',
   'sales.print', 'sales.export',
   'purchases.print',
   'products.print', 'products.export', 'products.import',
@@ -72,6 +78,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   'raw_materials.view', 'raw_materials.manage',
   'recipes.view', 'recipes.manage',
   'production.view', 'production.manage', 'production.waste',
+  'waste.view', 'waste.create', 'waste.approve',
   'warehouses.view', 'warehouses.manage',
   'customers.view', 'customers.manage',
   'suppliers.view', 'suppliers.manage',
@@ -91,10 +98,20 @@ export const ALL_PERMISSIONS: Permission[] = [
 
 export const PERMISSION_LABELS: Record<Permission, { ar: string; en: string }> = {
   'dashboard.view': { ar: 'عرض لوحة التحكم', en: 'View Dashboard' },
-  'pos.sell': { ar: 'البيع من نقطة البيع', en: 'Sell from POS' },
+  'pos.sell': { ar: 'الدخول إلى نقطة البيع', en: 'Access POS' },
+  'pos.order.create': { ar: 'إنشاء طلب', en: 'Create Order' },
+  'pos.order.edit': { ar: 'تعديل طلب مفتوح', en: 'Edit Open Order' },
+  'pos.order.hold': { ar: 'تعليق واستئناف الطلبات', en: 'Hold & Resume Orders' },
+  'pos.order.send_kitchen': { ar: 'إرسال الطلب للمطبخ', en: 'Send Orders to Kitchen' },
+  'pos.order.cancel': { ar: 'إلغاء الطلبات', en: 'Cancel Orders' },
+  'pos.payment.collect': { ar: 'تحصيل وإغلاق الطلب', en: 'Collect Payment & Close Order' },
   'pos.discount': { ar: 'منح خصومات من نقطة البيع', en: 'Give POS Discounts' },
   'pos.change_price': { ar: 'تغيير سعر البيع من نقطة البيع', en: 'Change Sale Price in POS' },
   'pos.reprint': { ar: 'إعادة طباعة فاتورة', en: 'Reprint Receipt' },
+  'pos.approve.discount': { ar: 'اعتماد الخصومات', en: 'Approve Discounts' },
+  'pos.approve.reprint': { ar: 'اعتماد إعادة الطباعة', en: 'Approve Reprints' },
+  'pos.approve.cancel': { ar: 'اعتماد إلغاء الطلب', en: 'Approve Order Cancellation' },
+  'pos.approve.void': { ar: 'اعتماد إلغاء صنف مرسل', en: 'Approve Sent Item Void' },
   'sales.print': { ar: 'طباعة فواتير المبيعات', en: 'Print Sales Invoices' },
   'sales.export': { ar: 'تصدير فواتير المبيعات', en: 'Export Sales Invoices' },
   'purchases.print': { ar: 'طباعة فواتير المشتريات', en: 'Print Purchase Invoices' },
@@ -133,6 +150,9 @@ export const PERMISSION_LABELS: Record<Permission, { ar: string; en: string }> =
   'production.view': { ar: 'عرض أوامر الإنتاج', en: 'View Production Orders' },
   'production.manage': { ar: 'إدارة أوامر الإنتاج', en: 'Manage Production Orders' },
   'production.waste': { ar: 'تسجيل هالك الإنتاج', en: 'Record Production Waste' },
+  'waste.view': { ar: 'عرض مركز الهالك', en: 'View Waste Center' },
+  'waste.create': { ar: 'تسجيل طلب هالك', en: 'Create Waste Request' },
+  'waste.approve': { ar: 'اعتماد الهالك وخصم المخزون', en: 'Approve Waste & Deduct Stock' },
   'warehouses.view': { ar: 'عرض المخازن', en: 'View Warehouses' },
   'warehouses.manage': { ar: 'إدارة المخازن', en: 'Manage Warehouses' },
   'customers.view': { ar: 'عرض العملاء', en: 'View Customers' },
@@ -169,8 +189,16 @@ export interface PermissionGroup {
 export const PERMISSION_GROUPS: PermissionGroup[] = [
   { key: 'dashboard', ar: 'لوحة التحكم', en: 'Dashboard', permissions: ['dashboard.view'] },
   {
-    key: 'pos', ar: 'نقطة البيع', en: 'POS',
-    permissions: ['pos.sell', 'pos.discount', 'pos.change_price', 'pos.reprint', 'floor_plan.view', 'floor_plan.manage'],
+    key: 'pos', ar: 'تشغيل نقطة البيع', en: 'POS Operations',
+    permissions: [
+      'pos.sell', 'pos.order.create', 'pos.order.edit', 'pos.order.hold',
+      'pos.order.send_kitchen', 'pos.order.cancel', 'pos.payment.collect',
+      'pos.discount', 'pos.change_price', 'pos.reprint', 'floor_plan.view', 'floor_plan.manage',
+    ],
+  },
+  {
+    key: 'approvals', ar: 'الموافقات', en: 'Approvals',
+    permissions: ['pos.approve.discount', 'pos.approve.reprint', 'pos.approve.cancel', 'pos.approve.void', 'waste.approve', 'refunds.approve', 'inventory.transfers.approve'],
   },
   {
     key: 'products', ar: 'المنتجات', en: 'Products',
@@ -184,15 +212,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   },
   {
     key: 'inventory', ar: 'المخزون', en: 'Inventory',
-    permissions: ['inventory.view', 'inventory.manage', 'inventory.transfers', 'inventory.transfers.approve', 'inventory.ledger.view'],
+    permissions: ['inventory.view', 'inventory.manage', 'inventory.transfers', 'inventory.ledger.view'],
   },
+  { key: 'waste', ar: 'مركز الهالك', en: 'Waste Center', permissions: ['waste.view', 'waste.create'] },
   { key: 'raw_materials', ar: 'المواد الخام', en: 'Raw Materials', permissions: ['raw_materials.view', 'raw_materials.manage'] },
   { key: 'recipes', ar: 'الوصفات', en: 'Recipes', permissions: ['recipes.view', 'recipes.manage'] },
   { key: 'production', ar: 'الإنتاج', en: 'Production', permissions: ['production.view', 'production.manage', 'production.waste'] },
   { key: 'warehouses', ar: 'المخازن', en: 'Warehouses', permissions: ['warehouses.view', 'warehouses.manage'] },
   { key: 'customers', ar: 'العملاء', en: 'Customers', permissions: ['customers.view', 'customers.manage', 'customers.print', 'customers.export'] },
   { key: 'suppliers', ar: 'الموردون', en: 'Suppliers', permissions: ['suppliers.view', 'suppliers.manage', 'suppliers.print'] },
-  { key: 'sales', ar: 'المبيعات', en: 'Sales', permissions: ['sales.view', 'refunds.approve', 'sales.print', 'sales.export'] },
+  { key: 'sales', ar: 'المبيعات', en: 'Sales', permissions: ['sales.view', 'sales.print', 'sales.export'] },
   { key: 'expenses', ar: 'المصروفات', en: 'Expenses', permissions: ['expenses.view', 'expenses.manage', 'expenses.print'] },
   { key: 'accounts', ar: 'المحاسبة', en: 'Accounting', permissions: ['accounts.view', 'accounts.manage'] },
   { key: 'shifts', ar: 'الشيفتات', en: 'Shifts', permissions: ['shifts.view', 'shifts.open', 'shifts.close', 'shifts.manage'] },
@@ -208,14 +237,18 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   super_admin: [...ALL_PERMISSIONS],
   owner: [...ALL_PERMISSIONS],
   branch_manager: [
-    'dashboard.view', 'pos.sell', 'pos.discount', 'pos.change_price', 'pos.reprint',
+    'dashboard.view', 'pos.sell',
+    'pos.order.create', 'pos.order.edit', 'pos.order.hold', 'pos.order.send_kitchen', 'pos.order.cancel', 'pos.payment.collect',
+    'pos.discount', 'pos.change_price', 'pos.reprint',
+    'pos.approve.discount', 'pos.approve.reprint', 'pos.approve.cancel', 'pos.approve.void',
     'floor_plan.view', 'floor_plan.manage',
     'products.view', 'products.manage', 'products.print', 'products.export', 'products.import',
     'categories.view', 'categories.manage',
     'components.view', 'components.manage',
     'purchases.view', 'purchases.manage', 'purchases.print',
     'purchases.requests', 'purchases.rfq', 'purchases.receiving', 'purchases.evaluation',
-    'inventory.view', 'inventory.manage',
+    'inventory.view', 'inventory.manage', 'inventory.transfers', 'inventory.transfers.approve', 'inventory.ledger.view',
+    'waste.view', 'waste.create', 'waste.approve',
     'warehouses.view', 'warehouses.manage',
     'customers.view', 'customers.manage', 'customers.print', 'customers.export',
     'suppliers.view', 'suppliers.manage', 'suppliers.print',
@@ -227,11 +260,15 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'users.view', 'users.manage',
     'settings.manage',
   ],
+  captain: [
+    'dashboard.view', 'pos.sell',
+    'pos.order.create', 'pos.order.edit', 'pos.order.hold', 'pos.order.send_kitchen',
+    'floor_plan.view', 'floor_plan.manage',
+    'products.view',
+    'customers.view', 'customers.manage',
+  ],
   cashier: [
-    'dashboard.view', 'pos.sell', 'pos.reprint', 'floor_plan.view',
-    'products.view', 'products.print',
-    'customers.view', 'customers.manage', 'customers.print',
-    'inventory.view',
+    'dashboard.view', 'pos.sell', 'pos.payment.collect', 'pos.reprint',
     'sales.view', 'sales.print',
     'shifts.view', 'shifts.open', 'shifts.close',
   ],
@@ -240,7 +277,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'products.view', 'products.manage', 'products.print', 'products.export', 'products.import',
     'categories.view', 'categories.manage',
     'components.view', 'components.manage',
-    'inventory.view', 'inventory.manage',
+    'inventory.view', 'inventory.manage', 'inventory.transfers', 'inventory.ledger.view',
+    'waste.view', 'waste.create',
     'warehouses.view', 'warehouses.manage',
     'purchases.view', 'purchases.manage', 'purchases.print',
     'purchases.requests', 'purchases.rfq', 'purchases.receiving', 'purchases.evaluation',
@@ -266,6 +304,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'raw_materials.view', 'raw_materials.manage',
     'recipes.view', 'recipes.manage',
     'production.view', 'production.manage', 'production.waste',
+    'waste.view', 'waste.create',
     'inventory.view', 'inventory.manage',
     'warehouses.view', 'warehouses.manage',
     'inventory.transfers', 'inventory.transfers.approve',
@@ -288,6 +327,7 @@ export const ROLE_META: Record<Role, { ar: string; en: string }> = {
   super_admin: { ar: 'مدير عام', en: 'Super Admin' },
   owner: { ar: 'مالك', en: 'Owner' },
   branch_manager: { ar: 'مدير فرع', en: 'Branch Manager' },
+  captain: { ar: 'كابتن أوردر', en: 'Order Captain' },
   cashier: { ar: 'أمين صندوق', en: 'Cashier' },
   warehouse_manager: { ar: 'مدير مخازن', en: 'Warehouse Manager' },
   accountant: { ar: 'محاسب', en: 'Accountant' },
