@@ -4,10 +4,10 @@ export type { Role };
 
 /**
  * Pure enterprise permission model — dotted `module.action` permissions.
- * Admins (super_admin / owner) implicitly have every permission.
- * Non-admin roles resolve permissions from the DB-backed `roles` table
- * (exposed through RolesContext) and fall back to DEFAULT_ROLE_PERMISSIONS
- * while the table is still loading or unavailable.
+ * Only super_admin is an implicit platform administrator.
+ * Every other role is a label/template and is authorized exclusively from the
+ * DB-backed permission map. Permission resolution must fail closed when that
+ * map is unavailable.
  */
 
 export type Permission =
@@ -167,130 +167,43 @@ export interface PermissionGroup {
 }
 
 export const PERMISSION_GROUPS: PermissionGroup[] = [
+  { key: 'dashboard', ar: 'لوحة التحكم', en: 'Dashboard', permissions: ['dashboard.view'] },
   {
-    key: 'dashboard',
-    ar: 'لوحة التحكم',
-    en: 'Dashboard',
-    permissions: ['dashboard.view'],
+    key: 'pos', ar: 'نقطة البيع', en: 'POS',
+    permissions: ['pos.sell', 'pos.discount', 'pos.change_price', 'pos.reprint', 'floor_plan.view', 'floor_plan.manage'],
   },
   {
-    key: 'pos',
-    ar: 'نقطة البيع',
-    en: 'POS',
-    permissions: [
-      'pos.sell', 'pos.discount', 'pos.change_price', 'pos.reprint',
-      'floor_plan.view', 'floor_plan.manage',
-    ],
-  },
-  {
-    key: 'products',
-    ar: 'المنتجات',
-    en: 'Products',
+    key: 'products', ar: 'المنتجات', en: 'Products',
     permissions: ['products.view', 'products.manage', 'products.print', 'products.export', 'products.import'],
   },
+  { key: 'categories', ar: 'الأصناف', en: 'Categories', permissions: ['categories.view', 'categories.manage'] },
+  { key: 'components', ar: 'المكونات', en: 'Components', permissions: ['components.view', 'components.manage'] },
   {
-    key: 'categories',
-    ar: 'الأصناف',
-    en: 'Categories',
-    permissions: ['categories.view', 'categories.manage'],
+    key: 'purchases', ar: 'المشتريات', en: 'Purchases',
+    permissions: ['purchases.view', 'purchases.manage', 'purchases.print', 'purchases.requests', 'purchases.rfq', 'purchases.receiving', 'purchases.evaluation'],
   },
   {
-    key: 'components',
-    ar: 'المكونات',
-    en: 'Components',
-    permissions: ['components.view', 'components.manage'],
+    key: 'inventory', ar: 'المخزون', en: 'Inventory',
+    permissions: ['inventory.view', 'inventory.manage', 'inventory.transfers', 'inventory.transfers.approve', 'inventory.ledger.view'],
   },
-  {
-    key: 'purchases',
-    ar: 'المشتريات',
-    en: 'Purchases',
-    permissions: ['purchases.view', 'purchases.manage', 'purchases.print',
-      'purchases.requests', 'purchases.rfq', 'purchases.receiving', 'purchases.evaluation'],
-  },
-  {
-    key: 'inventory',
-    ar: 'المخزون',
-    en: 'Inventory',
-    permissions: [
-      'inventory.view', 'inventory.manage',
-      'inventory.transfers', 'inventory.transfers.approve',
-      'inventory.ledger.view',
-    ],
-  },
-  {
-    key: 'raw_materials',
-    ar: 'المواد الخام',
-    en: 'Raw Materials',
-    permissions: ['raw_materials.view', 'raw_materials.manage'],
-  },
-  {
-    key: 'recipes',
-    ar: 'الوصفات',
-    en: 'Recipes',
-    permissions: ['recipes.view', 'recipes.manage'],
-  },
-  {
-    key: 'production',
-    ar: 'الإنتاج',
-    en: 'Production',
-    permissions: ['production.view', 'production.manage', 'production.waste'],
-  },
-  {
-    key: 'warehouses',
-    ar: 'المخازن',
-    en: 'Warehouses',
-    permissions: ['warehouses.view', 'warehouses.manage'],
-  },
-  {
-    key: 'customers',
-    ar: 'العملاء',
-    en: 'Customers',
-    permissions: ['customers.view', 'customers.manage', 'customers.print', 'customers.export'],
-  },
-  {
-    key: 'suppliers',
-    ar: 'الموردون',
-    en: 'Suppliers',
-    permissions: ['suppliers.view', 'suppliers.manage', 'suppliers.print'],
-  },
-  {
-    key: 'sales',
-    ar: 'المبيعات',
-    en: 'Sales',
-    permissions: ['sales.view', 'refunds.approve', 'sales.print', 'sales.export'],
-  },
-  {
-    key: 'expenses',
-    ar: 'المصروفات',
-    en: 'Expenses',
-    permissions: ['expenses.view', 'expenses.manage', 'expenses.print'],
-  },
-  {
-    key: 'accounts',
-    ar: 'المحاسبة',
-    en: 'Accounting',
-    permissions: ['accounts.view', 'accounts.manage'],
-  },
-  {
-    key: 'shifts',
-    ar: 'الشيفتات',
-    en: 'Shifts',
-    permissions: ['shifts.view', 'shifts.open', 'shifts.close', 'shifts.manage'],
-  },
-  {
-    key: 'reports',
-    ar: 'التقارير',
-    en: 'Reports',
-    permissions: ['reports.view', 'reports.financial', 'reports.costing', 'reports.print', 'reports.export'],
-  },
-  {
-    key: 'admin',
-    ar: 'الإدارة',
-    en: 'Administration',
-    permissions: ['users.view', 'users.manage', 'audit.view', 'settings.manage', 'branches.manage'],
-  },
+  { key: 'raw_materials', ar: 'المواد الخام', en: 'Raw Materials', permissions: ['raw_materials.view', 'raw_materials.manage'] },
+  { key: 'recipes', ar: 'الوصفات', en: 'Recipes', permissions: ['recipes.view', 'recipes.manage'] },
+  { key: 'production', ar: 'الإنتاج', en: 'Production', permissions: ['production.view', 'production.manage', 'production.waste'] },
+  { key: 'warehouses', ar: 'المخازن', en: 'Warehouses', permissions: ['warehouses.view', 'warehouses.manage'] },
+  { key: 'customers', ar: 'العملاء', en: 'Customers', permissions: ['customers.view', 'customers.manage', 'customers.print', 'customers.export'] },
+  { key: 'suppliers', ar: 'الموردون', en: 'Suppliers', permissions: ['suppliers.view', 'suppliers.manage', 'suppliers.print'] },
+  { key: 'sales', ar: 'المبيعات', en: 'Sales', permissions: ['sales.view', 'refunds.approve', 'sales.print', 'sales.export'] },
+  { key: 'expenses', ar: 'المصروفات', en: 'Expenses', permissions: ['expenses.view', 'expenses.manage', 'expenses.print'] },
+  { key: 'accounts', ar: 'المحاسبة', en: 'Accounting', permissions: ['accounts.view', 'accounts.manage'] },
+  { key: 'shifts', ar: 'الشيفتات', en: 'Shifts', permissions: ['shifts.view', 'shifts.open', 'shifts.close', 'shifts.manage'] },
+  { key: 'reports', ar: 'التقارير', en: 'Reports', permissions: ['reports.view', 'reports.financial', 'reports.costing', 'reports.print', 'reports.export'] },
+  { key: 'admin', ar: 'الإدارة', en: 'Administration', permissions: ['users.view', 'users.manage', 'audit.view', 'settings.manage', 'branches.manage'] },
 ];
 
+/**
+ * Role templates used for seeding/editing defaults only.
+ * They are never an authorization fallback at runtime.
+ */
 export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   super_admin: [...ALL_PERMISSIONS],
   owner: [...ALL_PERMISSIONS],
@@ -363,7 +276,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
 };
 
-/** DB row of the `roles` table. */
 export interface RoleDef {
   role: Role;
   name_ar: string;
@@ -372,7 +284,6 @@ export interface RoleDef {
   updated_at?: string;
 }
 
-/** Display labels for every role (fallback before the roles table loads). */
 export const ROLE_META: Record<Role, { ar: string; en: string }> = {
   super_admin: { ar: 'مدير عام', en: 'Super Admin' },
   owner: { ar: 'مالك', en: 'Owner' },
@@ -384,13 +295,13 @@ export const ROLE_META: Record<Role, { ar: string; en: string }> = {
 };
 
 export function isAdminRole(role?: Role | null): boolean {
-  return role === 'super_admin' || role === 'owner';
+  return role === 'super_admin';
 }
 
 /**
- * Resolves whether a role has a permission. Admins always have everything.
- * `rolePermissionsMap` (from the DB `roles` table) overrides the code
- * defaults — it should be the source of truth once loaded.
+ * Runtime permission resolution. Super Admin is the only implicit bypass.
+ * All other roles require an explicit DB permission entry and fail closed when
+ * the permission map is absent.
  */
 export function hasPermission(
   role: Role | null | undefined,
@@ -398,7 +309,7 @@ export function hasPermission(
   permission: Permission
 ): boolean {
   if (!role) return false;
-  if (isAdminRole(role)) return true;
-  const list = rolePermissionsMap?.[role] ?? DEFAULT_ROLE_PERMISSIONS[role];
-  return list?.includes(permission) ?? false;
+  if (role === 'super_admin') return true;
+  const list = rolePermissionsMap?.[role];
+  return Array.isArray(list) && list.includes(permission);
 }
