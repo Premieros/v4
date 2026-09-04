@@ -1,26 +1,31 @@
 import { createClient } from '@supabase/supabase-js';
 
-const OLD_HOSTS = ['azzdesuowpdcoflmyezn'];
-const DEFAULT_SUPABASE_URL = 'https://cuitndfayupfysejlpda.supabase.co';
-const DEFAULT_ANON_KEY = 'sb_publishable_Pg0CAIqHn43BxwaB2eSogg_foaC60qs';
+export const SUPABASE_PROJECT_REF = 'cuitndfayupfysejlpda';
+export const SUPABASE_PROJECT_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co`;
+const DEFAULT_PUBLISHABLE_KEY = 'sb_publishable_Pg0CAIqHn43BxwaB2eSogg_foaC60qs';
 
 const rawUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
 const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
 
-const isStaleUrl = Boolean(rawUrl && OLD_HOSTS.some(h => rawUrl.includes(h)));
+const normalizeUrl = (value: string) => value.replace(/\/+$/, '');
 
-const supabaseUrl = (!rawUrl || isStaleUrl) ? DEFAULT_SUPABASE_URL : rawUrl;
-const supabaseAnonKey = (!rawKey || isStaleUrl) ? DEFAULT_ANON_KEY : rawKey;
-
-if (!supabaseUrl) {
-  throw new Error('Supabase URL is missing. Please set VITE_SUPABASE_URL.');
+if (rawUrl && normalizeUrl(rawUrl) !== SUPABASE_PROJECT_URL) {
+  throw new Error(
+    `Database isolation violation: v4 is locked to Supabase project ${SUPABASE_PROJECT_REF}.`
+  );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey || 'placeholder-anon-key-for-build', {
+const supabaseUrl = SUPABASE_PROJECT_URL;
+const supabaseAnonKey = rawKey || DEFAULT_PUBLISHABLE_KEY;
+
+if (!supabaseAnonKey) {
+  throw new Error('Supabase publishable key is missing. Please set VITE_SUPABASE_ANON_KEY.');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
   },
 });
-
