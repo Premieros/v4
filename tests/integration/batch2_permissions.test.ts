@@ -2,7 +2,7 @@
  * Batch 2 — Permissions + Super Admin Console
  * Integration tests for:
  *   1. Owner sees own organization
- *   2. Owner cannot see another organization
+ *   2. Owner does not get branch access implicitly
  *   3. Owner creates branch
  *   4. Owner cannot create branch in another org
  *   5. Branch Manager sees allowed branches only
@@ -56,7 +56,7 @@ function skip() {
   return false;
 }
 
-describe('Batch 2: Owner sees own organization', () => {
+describe('Batch 2: Owner organization membership is not branch authorization', () => {
   it('owner can query organizations they belong to', async () => {
     if (skip()) return;
     const r = await runAs(client, ids.users.owner,
@@ -64,11 +64,11 @@ describe('Batch 2: Owner sees own organization', () => {
     expect(r.rowCount).toBeGreaterThanOrEqual(1);
   });
 
-  it('owner sees own branches via user_may_access_branch', async () => {
+  it('owner needs an explicit branch grant despite organization membership', async () => {
     if (skip()) return;
     const r = await runAs(client, ids.users.owner,
       `SELECT public.user_may_access_branch($1)`, [ids.branchA]);
-    expect(r.rows[0].user_may_access_branch).toBe(true);
+    expect(r.rows[0].user_may_access_branch).toBe(false);
   });
 });
 
@@ -261,7 +261,6 @@ describe('Batch 2: Disabled branch blocks operational writes', () => {
       `INSERT INTO public.sales (invoice_number, branch_id, warehouse_id, subtotal, discount_amount, tax_amount, total, paid_amount, payment_method, status)
        VALUES ('DISABLED-TEST', (SELECT id FROM public.branches WHERE name = 'RLS A' LIMIT 1), $1, 0, 0, 0, 0, 0, 'cash', 'completed')`,
       [ids.whA]);
-    // Should succeed for active branch, the trigger only blocks inactive branches
     expect(r.error).toBeUndefined();
   });
 });
