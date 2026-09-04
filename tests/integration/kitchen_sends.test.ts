@@ -20,6 +20,7 @@ describe.skipIf(skip)('send_to_kitchen + order_kitchen_sends (048)', () => {
   const orgId = randomUUID();
   beforeAll(async () => {
     client = openDb(dbUrl!); await client.connect(); await client.query('BEGIN'); await client.query(`ALTER TABLE public.users DISABLE TRIGGER trg_users_role_guard`);
+    await client.query(`UPDATE public.roles SET permissions = permissions || '["pos.order.create","pos.order.edit","pos.order.hold","pos.order.send_kitchen","pos.payment.collect","floor_plan.manage"]'::jsonb WHERE role = 'cashier'`);
     await client.query(`INSERT INTO public.organizations (id, name, slug) VALUES ($1, $2, $3)`, [orgId, '048 Org', `048-${randomUUID().slice(0,8)}`]);
     await client.query(`INSERT INTO public.branches (id, name, organization_id) VALUES ($1, $2, $3)`, [branchId, '048 Branch', orgId]);
     await client.query(`INSERT INTO public.warehouses (id, name, branch_id, is_active) VALUES ($1, $2, $3, true)`, [whId, '048 WH', branchId]);
@@ -31,6 +32,7 @@ describe.skipIf(skip)('send_to_kitchen + order_kitchen_sends (048)', () => {
     }
     await client.query(`INSERT INTO public.users (id, email, full_name, role, branch_id, is_active) VALUES ($1, $2, $3, 'cashier', $4, true)`, [cashierId, `k-${randomUUID()}@test.local`, 'Cashier', branchId]);
     await client.query(`INSERT INTO public.organization_members (organization_id, user_id, membership_role, is_active) VALUES ($1, $2, 'member', true)`, [orgId, cashierId]);
+    await client.query(`INSERT INTO public.user_branch_access (user_id, branch_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [cashierId, branchId]);
     await client.query(`INSERT INTO public.shifts (branch_id, cashier_id, opening_amount, status) VALUES ($1, $2, 0, 'open')`, [branchId, cashierId]);
     await client.query(`UPDATE public.settings SET tax_enabled = false`);
   });
@@ -74,7 +76,7 @@ describe.skipIf(skip)('send_to_kitchen + order_kitchen_sends (048)', () => {
 
     await client.query(`SELECT public.ensure_chart_of_accounts($1)`, [branchId]);
     await client.query(`SELECT public.seed_account_mappings($1)`, [branchId]);
-    const sale = await client.query(`SELECT public.process_sale($1, $2, $3, NULL, NULL, 200, 0, 'amount', 0, 0, 200, 200, 'cash', 'completed', $4::jsonb, NULL, 'takeaway', NULL, $5) AS r`, [`INV-${randomUUID()}`, branchId, whId, cart, orderId]);
+    const sale = await asUser(() => client.query(`SELECT public.process_sale($1, $2, $3, NULL, NULL, 200, 0, 'amount', 0, 0, 200, 200, 'cash', 'completed', $4::jsonb, NULL, 'takeaway', NULL, $5) AS r`, [`INV-${randomUUID()}`, branchId, whId, cart, orderId]));
     expect(sale.rows[0].r.success).toBe(true);
     if (!sale.rows[0].r.success) throw new Error(JSON.stringify(sale.rows[0].r));
 
