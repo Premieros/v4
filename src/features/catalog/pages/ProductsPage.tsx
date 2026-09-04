@@ -20,6 +20,7 @@ import { logAudit } from '@/lib/audit';
 import { useBranchFilter } from '@/lib/useBranchFilter';
 import { useCan } from '@/lib/permissions';
 import { useSettings } from '@/context/SettingsContext';
+import { APP_ROUTES } from '@/core/navigation/routes';
 import { useUserBranches } from '@/hooks/useUserBranches';
 import { usePaginatedRows } from '@/hooks/usePaginatedRows';
 import type { Product, Category } from '@/lib/types';
@@ -102,7 +103,7 @@ export function ProductsPage() {
       || product.sku?.toLowerCase().includes(needle);
   });
 
-  const openAdd = () => navigate('/products/setup');
+  const openAdd = () => navigate(`${APP_ROUTES.products}/setup`);
 
   const openEdit = (product: Product) => {
     if (!can('products.manage')) return;
@@ -340,12 +341,12 @@ export function ProductsPage() {
         actions={
           <>
             {can('raw_materials.view') && (
-              <Button variant="outline" size="sm" onClick={() => navigate('/inventory-units')}>
+              <Button variant="outline" size="sm" onClick={() => navigate(APP_ROUTES.inventoryUnits)}>
                 <Package className="w-4 h-4" /> {isAr ? 'الوحدات' : 'Units'}
               </Button>
             )}
             {can('components.view') && (
-              <Button variant="outline" size="sm" onClick={() => navigate('/components')}>
+              <Button variant="outline" size="sm" onClick={() => navigate(APP_ROUTES.components)}>
                 <Layers className="w-4 h-4" /> {t('components')}
               </Button>
             )}
