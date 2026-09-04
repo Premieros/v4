@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ShoppingCart, Minus, Plus, X, Pause, ChefHat, Banknote, Printer, Percent, UtensilsCrossed, Clock, Check, Trash2, User } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
+import { useCan } from '@/lib/permissions';
 import { formatCurrency } from '@/lib/format';
 import type { CartItem, Customer, DiningTable, OrderItem, OrderType } from '@/lib/types';
 import type { KitchenSendItem } from '../../types';
@@ -101,8 +102,16 @@ export function CurrentOrderPanel({
   onVoidItem,
 }: CurrentOrderPanelProps) {
   const { t, lang } = useLanguage();
+  const can = useCan();
   const isAr = lang === 'ar';
   const [showDiscount, setShowDiscount] = useState(false);
+
+  const canModifyOrder = activeOrderId ? can('pos.order.edit') : can('pos.order.create');
+  const canHold = can('pos.order.hold');
+  const canSendKitchen = can('pos.order.send_kitchen');
+  const canCollectPayment = can('pos.payment.collect');
+  const canPrint = can('sales.print');
+  const canVoid = can('pos.order.cancel') || can('pos.approve.void');
 
   const sentState = computeSentState(cart, orderItems, sentOrderItemIds, sessionSent);
   const newCount = cart.filter((i) => (sentState[i.product.id]?.newQty || 0) > 0).length;
@@ -115,7 +124,6 @@ export function CurrentOrderPanel({
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-ui-surface">
-      {/* Top Header */}
       <div className="px-3 py-2.5 border-b border-ui-border flex-shrink-0 space-y-2">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-xl bg-ui-primary-soft flex items-center justify-center">
@@ -125,12 +133,10 @@ export function CurrentOrderPanel({
             <p className="text-sm font-black text-ui-text truncate">
               {activeOrderNumber ? `#${activeOrderNumber}` : t('newOrder')}
             </p>
-            <p className="text-[11px] text-ui-subtle">
-              {cart.length} {isAr ? 'صنف' : 'items'}
-            </p>
+            <p className="text-[11px] text-ui-subtle">{cart.length} {isAr ? 'صنف' : 'items'}</p>
           </div>
           <OrderStageBadge stage={stage} />
-          {activeOrderId && !empty && canDeleteItem && (
+          {activeOrderId && !empty && canDeleteItem && canModifyOrder && (
             <button
               onClick={onClear}
               aria-label={isAr ? 'مسح الطلب' : 'Clear order'}
@@ -141,9 +147,8 @@ export function CurrentOrderPanel({
           )}
         </div>
 
-        {/* Order Type & Context Chips */}
         <div className="flex items-center gap-1.5 flex-wrap">
-          {activeOrderNumber ? (
+          {activeOrderNumber || !canModifyOrder ? (
             <OrderTypePill type={orderType} />
           ) : (
             <div className="flex items-center gap-1 rounded-xl bg-ui-page-alt p-1">
@@ -156,11 +161,7 @@ export function CurrentOrderPanel({
                     data-testid={`pos-switch-type-${ot}`}
                     aria-pressed={active}
                     onClick={() => onSwitchOrderType(ot)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition-colors ${
-                      active
-                        ? 'bg-ui-primary text-ui-primary-fg shadow-ui-sm'
-                        : 'text-ui-muted hover:text-ui-text'
-                    }`}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition-colors ${active ? 'bg-ui-primary text-ui-primary-fg shadow-ui-sm' : 'text-ui-muted hover:text-ui-text'}`}
                   >
                     {orderTypeLabel(t, ot)}
                   </button>
@@ -169,33 +170,28 @@ export function CurrentOrderPanel({
             </div>
           )}
 
-          {/* Table Selector Pill */}
           {orderType === 'dine_in' && (
             <button
               type="button"
-              onClick={onOpenTableModal}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-ui-page-alt text-[11px] font-bold text-ui-muted hover:text-ui-text hover:bg-ui-primary-soft transition"
+              onClick={canModifyOrder ? onOpenTableModal : undefined}
+              disabled={!canModifyOrder}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-ui-page-alt text-[11px] font-bold text-ui-muted enabled:hover:text-ui-text enabled:hover:bg-ui-primary-soft disabled:opacity-70 transition"
             >
               <UtensilsCrossed className="w-3 h-3 text-ui-success" />
-              <span className="truncate max-w-[110px]">
-                {activeTable?.name || (isAr ? 'اختر طاولة' : 'Select table')}
-              </span>
+              <span className="truncate max-w-[110px]">{activeTable?.name || (isAr ? 'اختر طاولة' : 'Select table')}</span>
             </button>
           )}
 
-          {/* Customer Selector Pill */}
           <button
             type="button"
-            onClick={onOpenCustomerModal}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-ui-page-alt text-[11px] font-bold text-ui-muted hover:text-ui-text hover:bg-ui-primary-soft transition"
+            onClick={canModifyOrder ? onOpenCustomerModal : undefined}
+            disabled={!canModifyOrder}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-ui-page-alt text-[11px] font-bold text-ui-muted enabled:hover:text-ui-text enabled:hover:bg-ui-primary-soft disabled:opacity-70 transition"
           >
             <User className="w-3 h-3 text-ui-accent" />
-            <span className="truncate max-w-[110px]">
-              {currentCustomer?.name || (isAr ? 'عميل عام' : 'General')}
-            </span>
+            <span className="truncate max-w-[110px]">{currentCustomer?.name || (isAr ? 'عميل عام' : 'General')}</span>
           </button>
 
-          {/* Guests count for dine-in */}
           {orderType === 'dine_in' && (
             <label className="flex items-center gap-1 text-[11px] text-ui-muted">
               {isAr ? 'أفراد' : 'Guests'}:
@@ -204,8 +200,9 @@ export function CurrentOrderPanel({
                 min={1}
                 value={guestCount || ''}
                 placeholder="0"
+                disabled={!canModifyOrder}
                 onChange={(e) => onGuestCountChange(parseInt(e.target.value) || null)}
-                className="w-12 px-1.5 py-1 rounded-lg border border-ui-border bg-ui-surface-raised text-center text-xs font-bold text-ui-text focus:outline-none focus:ring-1 focus:ring-ui-ring"
+                className="w-12 px-1.5 py-1 rounded-lg border border-ui-border bg-ui-surface-raised text-center text-xs font-bold text-ui-text disabled:opacity-70 focus:outline-none focus:ring-1 focus:ring-ui-ring"
               />
             </label>
           )}
@@ -217,15 +214,10 @@ export function CurrentOrderPanel({
               {ago && <span className="hidden xl:inline">· {ago.n != null ? `${ago.n} ${t(ago.key)}` : t(ago.key)}</span>}
             </span>
           )}
-          {orderNotes && (
-            <div className="w-full text-[11px] text-ui-subtle bg-ui-page-alt px-2 py-1 rounded-lg truncate">
-              {orderNotes}
-            </div>
-          )}
+          {orderNotes && <div className="w-full text-[11px] text-ui-subtle bg-ui-page-alt px-2 py-1 rounded-lg truncate">{orderNotes}</div>}
         </div>
       </div>
 
-      {/* Cart Items List */}
       <div className="flex-1 overflow-y-auto px-2.5 py-2">
         {empty ? (
           <div className="flex flex-col items-center justify-center h-full text-ui-subtle">
@@ -234,7 +226,9 @@ export function CurrentOrderPanel({
             </div>
             <p className="text-sm font-medium">{t('emptyCart')}</p>
             <p className="text-xs text-ui-subtle mt-1">
-              {isAr ? 'اضغط على المنتج لإضافته' : 'Tap a product to add it'}
+              {canModifyOrder
+                ? (isAr ? 'اضغط على المنتج لإضافته' : 'Tap a product to add it')
+                : (isAr ? 'اختر طلبًا مفتوحًا لإتمام الدفع' : 'Select an open order to collect payment')}
             </p>
           </div>
         ) : (
@@ -242,74 +236,54 @@ export function CurrentOrderPanel({
             {cart.map((item) => {
               const st = sentState[item.product.id] || { sentQty: 0, newQty: item.quantity, sent: false, partial: false };
               return (
-                <div
-                  key={item.product.id}
-                  className="flex items-center gap-2 p-2 rounded-xl bg-ui-page-alt hover:bg-ui-page-alt/80 transition-colors group"
-                >
+                <div key={item.product.id} className="flex items-center gap-2 p-2 rounded-xl bg-ui-page-alt hover:bg-ui-page-alt/80 transition-colors group">
                   <div
-                    onClick={() => onConfigureItem?.(item)}
-                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => canModifyOrder && onConfigureItem?.(item)}
+                    className={`flex-1 min-w-0 ${canModifyOrder ? 'cursor-pointer' : ''}`}
                   >
                     <div className="flex items-center gap-1.5">
-                      <p className="truncate text-xs font-black text-ui-text hover:text-ui-accent">
-                        {item.product.name}
-                      </p>
-                      {st.sent && (
-                        <span title={isAr ? 'تم الإرسال للمطبخ' : 'Sent to kitchen'}>
-                          <Check className="w-3 h-3 text-ui-success shrink-0" />
-                        </span>
-                      )}
+                      <p className="truncate text-xs font-black text-ui-text hover:text-ui-accent">{item.product.name}</p>
+                      {st.sent && <span title={isAr ? 'تم الإرسال للمطبخ' : 'Sent to kitchen'}><Check className="w-3 h-3 text-ui-success shrink-0" /></span>}
                     </div>
-                    {item.modifiers?.length ? (
-                      <p className="mt-0.5 truncate text-[10px] text-ui-subtle">
-                        {item.modifiers.map((m) => m.name.replace('note:', '📝 ')).join(' · ')}
-                      </p>
-                    ) : null}
+                    {item.modifiers?.length ? <p className="mt-0.5 truncate text-[10px] text-ui-subtle">{item.modifiers.map((m) => m.name.replace('note:', '📝 ')).join(' · ')}</p> : null}
                   </div>
 
-                  <div className="flex items-center gap-1">
-                    <button
-                      data-testid={`pos-cart-qty-decrease-${item.product.id}`}
-                      aria-label={isAr ? `تقليل كمية ${item.product.name}` : `Decrease quantity ${item.product.name}`}
-                      onClick={() => {
-                        if (st.sentQty > 0 && item.quantity <= st.sentQty && onVoidItem) {
-                          onVoidItem(item, st.sentQty);
-                        } else {
-                          onUpdateQty(item.product.id, -1);
-                        }
-                      }}
-                      className="h-7 w-7 rounded-lg border border-ui-border flex items-center justify-center text-ui-text hover:bg-ui-surface active:scale-95"
-                    >
-                      <Minus className="w-3.5 h-3.5" />
-                    </button>
-                    <span
-                      data-testid={`pos-cart-qty-${item.product.id}`}
-                      className="w-6 text-center text-xs font-black text-ui-text"
-                    >
-                      {item.quantity}
-                    </span>
-                    <button
-                      data-testid={`pos-cart-qty-increase-${item.product.id}`}
-                      aria-label={isAr ? `زيادة كمية ${item.product.name}` : `Increase quantity ${item.product.name}`}
-                      onClick={() => onUpdateQty(item.product.id, 1)}
-                      className="h-7 w-7 rounded-lg bg-ui-accent text-ui-primary-fg flex items-center justify-center hover:bg-ui-accent/90 active:scale-95 shadow-ui-sm"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  {canModifyOrder && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        data-testid={`pos-cart-qty-decrease-${item.product.id}`}
+                        aria-label={isAr ? `تقليل كمية ${item.product.name}` : `Decrease quantity ${item.product.name}`}
+                        onClick={() => {
+                          if (st.sentQty > 0 && item.quantity <= st.sentQty && onVoidItem && canVoid) onVoidItem(item, st.sentQty);
+                          else onUpdateQty(item.product.id, -1);
+                        }}
+                        className="h-7 w-7 rounded-lg border border-ui-border flex items-center justify-center text-ui-text hover:bg-ui-surface active:scale-95"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <span data-testid={`pos-cart-qty-${item.product.id}`} className="w-6 text-center text-xs font-black text-ui-text">{item.quantity}</span>
+                      <button
+                        data-testid={`pos-cart-qty-increase-${item.product.id}`}
+                        aria-label={isAr ? `زيادة كمية ${item.product.name}` : `Increase quantity ${item.product.name}`}
+                        onClick={() => onUpdateQty(item.product.id, 1)}
+                        className="h-7 w-7 rounded-lg bg-ui-accent text-ui-primary-fg flex items-center justify-center hover:bg-ui-accent/90 active:scale-95 shadow-ui-sm"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
 
-                  <span className="w-20 text-end text-xs font-black text-ui-text">
-                    {formatCurrency(item.quantity * item.unit_price - (item.discount_amount || 0), currency, lang)}
-                  </span>
+                  {!canModifyOrder && (
+                    <span data-testid={`pos-cart-qty-${item.product.id}`} className="w-10 text-center text-xs font-black text-ui-text">× {item.quantity}</span>
+                  )}
 
-                  {canDeleteItem && (
+                  <span className="w-20 text-end text-xs font-black text-ui-text">{formatCurrency(item.quantity * item.unit_price - (item.discount_amount || 0), currency, lang)}</span>
+
+                  {canDeleteItem && canModifyOrder && (
                     <button
                       onClick={() => {
-                        if (st.sentQty > 0 && onVoidItem) {
-                          onVoidItem(item, st.sentQty);
-                        } else {
-                          onRemove(item.product.id);
-                        }
+                        if (st.sentQty > 0 && onVoidItem && canVoid) onVoidItem(item, st.sentQty);
+                        else onRemove(item.product.id);
                       }}
                       aria-label={isAr ? `حذف ${item.product.name}` : `Remove ${item.product.name}`}
                       className="p-1 text-ui-subtle hover:text-ui-danger transition"
@@ -324,7 +298,6 @@ export function CurrentOrderPanel({
         )}
       </div>
 
-      {/* Totals & Action Bar */}
       <div className="border-t border-ui-border p-3 flex-shrink-0 space-y-2">
         <div className="grid grid-cols-3 gap-2">
           <div className="rounded-xl bg-ui-page-alt p-2">
@@ -333,88 +306,84 @@ export function CurrentOrderPanel({
           </div>
           <div className="rounded-xl bg-ui-page-alt p-2">
             <p className="text-[10px] text-ui-subtle">{t('discount')}</p>
-            <p data-testid="pos-discount-value" className="text-xs font-black">
-              {formatCurrency(discountValue, currency, lang)}
-            </p>
+            <p data-testid="pos-discount-value" className="text-xs font-black">{formatCurrency(discountValue, currency, lang)}</p>
           </div>
           <div className="rounded-xl bg-ui-primary-soft p-2">
             <p className="text-[10px] text-ui-subtle">{t('total')}</p>
-            <p data-testid="pos-total-value" className="text-sm font-black text-ui-accent">
-              {formatCurrency(total, currency, lang)}
-            </p>
+            <p data-testid="pos-total-value" className="text-sm font-black text-ui-accent">{formatCurrency(total, currency, lang)}</p>
           </div>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex gap-2">
-          {canDiscount && (
+          {canDiscount && canModifyOrder && (
             <button
               data-testid="pos-action-discount"
               aria-label={isAr ? 'الخصم (F6)' : 'Discount (F6)'}
               title={isAr ? 'الخصم (F6)' : 'Discount (F6)'}
               onClick={() => setShowDiscount(!showDiscount)}
-              className={`flex-1 rounded-xl py-2 text-xs font-black transition ${
-                showDiscount ? 'bg-ui-primary text-ui-primary-fg shadow-ui-sm' : 'bg-ui-page-alt text-ui-text hover:bg-ui-page-alt/80'
-              }`}
+              className={`flex-1 rounded-xl py-2 text-xs font-black transition ${showDiscount ? 'bg-ui-primary text-ui-primary-fg shadow-ui-sm' : 'bg-ui-page-alt text-ui-text hover:bg-ui-page-alt/80'}`}
             >
               <Percent className="mx-auto h-4 w-4" />
             </button>
           )}
-          <button
-            data-testid="pos-action-hold"
-            aria-label={isAr ? 'تعليق الطلب (F4)' : 'Hold order (F4)'}
-            title={isAr ? 'تعليق الطلب (F4)' : 'Hold order (F4)'}
-            onClick={onHold}
-            disabled={empty || orderLoading}
-            className="flex-1 rounded-xl bg-ui-page-alt py-2 text-xs font-black disabled:opacity-40 hover:bg-ui-page-alt/80 transition text-ui-text"
-          >
-            <Pause className="mx-auto h-4 w-4" />
-          </button>
-          <button
-            data-testid="pos-action-send-kitchen"
-            aria-label={isAr ? 'إرسال للمطبخ' : 'Send to kitchen'}
-            title={isAr ? 'إرسال للمطبخ' : 'Send to kitchen'}
-            onClick={onSendKitchen}
-            disabled={empty || kitchenSending || allSent}
-            className="flex-1 rounded-xl bg-ui-page-alt py-2 text-xs font-black disabled:opacity-40 hover:bg-ui-page-alt/80 transition text-ui-text"
-          >
-            <ChefHat className="mx-auto h-4 w-4" />
-          </button>
-          <button
-            data-testid="pos-action-print"
-            aria-label={isAr ? 'طباعة (F9)' : 'Print (F9)'}
-            title={isAr ? 'طباعة (F9)' : 'Print (F9)'}
-            onClick={onPrint}
-            disabled={empty}
-            className="flex-1 rounded-xl bg-ui-page-alt py-2 text-xs font-black disabled:opacity-40 hover:bg-ui-page-alt/80 transition text-ui-text"
-          >
-            <Printer className="mx-auto h-4 w-4" />
-          </button>
-          <button
-            data-testid="pos-action-pay"
-            aria-label={isAr ? 'الدفع (F8)' : 'Pay (F8)'}
-            onClick={onPay}
-            disabled={empty || completing}
-            className="flex-[2] rounded-xl bg-ui-success py-2 text-xs font-black text-ui-primary-fg disabled:opacity-40 hover:bg-ui-success/90 transition shadow-ui-md"
-          >
-            <Banknote className="mx-auto h-4 w-4 inline me-1" />
-            {isAr ? 'الدفع' : 'Pay'}
-          </button>
+          {canHold && canModifyOrder && (
+            <button
+              data-testid="pos-action-hold"
+              aria-label={isAr ? 'تعليق الطلب (F4)' : 'Hold order (F4)'}
+              title={isAr ? 'تعليق الطلب (F4)' : 'Hold order (F4)'}
+              onClick={onHold}
+              disabled={empty || orderLoading}
+              className="flex-1 rounded-xl bg-ui-page-alt py-2 text-xs font-black disabled:opacity-40 hover:bg-ui-page-alt/80 transition text-ui-text"
+            >
+              <Pause className="mx-auto h-4 w-4" />
+            </button>
+          )}
+          {canSendKitchen && canModifyOrder && (
+            <button
+              data-testid="pos-action-send-kitchen"
+              aria-label={isAr ? 'إرسال للمطبخ' : 'Send to kitchen'}
+              title={isAr ? 'إرسال للمطبخ' : 'Send to kitchen'}
+              onClick={onSendKitchen}
+              disabled={empty || kitchenSending || allSent}
+              className="flex-1 rounded-xl bg-ui-page-alt py-2 text-xs font-black disabled:opacity-40 hover:bg-ui-page-alt/80 transition text-ui-text"
+            >
+              <ChefHat className="mx-auto h-4 w-4" />
+            </button>
+          )}
+          {canPrint && (
+            <button
+              data-testid="pos-action-print"
+              aria-label={isAr ? 'طباعة (F9)' : 'Print (F9)'}
+              title={isAr ? 'طباعة (F9)' : 'Print (F9)'}
+              onClick={onPrint}
+              disabled={empty}
+              className="flex-1 rounded-xl bg-ui-page-alt py-2 text-xs font-black disabled:opacity-40 hover:bg-ui-page-alt/80 transition text-ui-text"
+            >
+              <Printer className="mx-auto h-4 w-4" />
+            </button>
+          )}
+          {canCollectPayment && (
+            <button
+              data-testid="pos-action-pay"
+              aria-label={isAr ? 'الدفع (F8)' : 'Pay (F8)'}
+              onClick={onPay}
+              disabled={empty || completing}
+              className="flex-[2] rounded-xl bg-ui-success py-2 text-xs font-black text-ui-primary-fg disabled:opacity-40 hover:bg-ui-success/90 transition shadow-ui-md"
+            >
+              <Banknote className="mx-auto h-4 w-4 inline me-1" />
+              {isAr ? 'الدفع' : 'Pay'}
+            </button>
+          )}
         </div>
 
-        {/* Discount Drawer */}
-        {showDiscount && (
+        {showDiscount && canDiscount && canModifyOrder && (
           <div data-testid="pos-discount-editor" className="rounded-xl border border-ui-border p-2 bg-ui-page-alt space-y-1">
             <div className="flex gap-2">
               <button
                 data-testid="pos-discount-percent"
                 type="button"
                 onClick={() => onDiscountTypeChange('percent')}
-                className={`flex-1 rounded-lg p-2 text-xs font-black transition ${
-                  discountType === 'percent'
-                    ? 'bg-ui-primary text-ui-primary-fg shadow-ui-sm'
-                    : 'bg-ui-surface text-ui-muted'
-                }`}
+                className={`flex-1 rounded-lg p-2 text-xs font-black transition ${discountType === 'percent' ? 'bg-ui-primary text-ui-primary-fg shadow-ui-sm' : 'bg-ui-surface text-ui-muted'}`}
               >
                 %
               </button>
@@ -422,11 +391,7 @@ export function CurrentOrderPanel({
                 data-testid="pos-discount-amount"
                 type="button"
                 onClick={() => onDiscountTypeChange('amount')}
-                className={`flex-1 rounded-lg p-2 text-xs font-black transition ${
-                  discountType === 'amount'
-                    ? 'bg-ui-primary text-ui-primary-fg shadow-ui-sm'
-                    : 'bg-ui-surface text-ui-muted'
-                }`}
+                className={`flex-1 rounded-lg p-2 text-xs font-black transition ${discountType === 'amount' ? 'bg-ui-primary text-ui-primary-fg shadow-ui-sm' : 'bg-ui-surface text-ui-muted'}`}
               >
                 {currency}
               </button>
