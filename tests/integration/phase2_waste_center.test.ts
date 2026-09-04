@@ -12,11 +12,12 @@ describe.skipIf(skip)('Phase 2 — waste center', () => {
   const whId = randomUUID();
   const catId = randomUUID();
   const rmId = randomUUID();
+  const adminId = randomUUID();
   let wasteId: string;
 
   async function asAdmin<T>(fn: () => Promise<T>): Promise<T> {
-    await client.query(`SELECT set_config('app.user_id', $1, true)`, [randomUUID()]);
-    await client.query(`SET LOCAL ROLE service_role`);
+    await client.query(`SELECT set_config('app.user_id', $1, true)`, [adminId]);
+    await client.query(`SET LOCAL ROLE authenticated`);
     await client.query(`SAVEPOINT phase2_waste_admin`);
     try {
       const result = await fn();
@@ -54,9 +55,12 @@ describe.skipIf(skip)('Phase 2 — waste center', () => {
     await client.connect();
     await client.query('BEGIN');
     await client.query(`ALTER TABLE public.users DISABLE TRIGGER trg_users_role_guard`);
+    await client.query(`INSERT INTO public.users (id, email, full_name, role, is_active) VALUES ($1, $2, 'Waste Admin', 'super_admin', true)`, [adminId, `waste-${randomUUID()}@test.local`]);
     await client.query(`INSERT INTO public.branches (id, name) VALUES ($1, 'Phase2 Test')`, [branchId]);
-    await client.query(`INSERT INTO public.warehouses (id, name, branch_id) VALUES ($1, 'WH', $2)`, [whId, branchId]);
+    await client.query(`INSERT INTO public.warehouses (id, name, branch_id, is_default) VALUES ($1, 'WH', $2, true)`, [whId, branchId]);
     await client.query(`INSERT INTO public.raw_materials (id, code, name, min_stock, default_cost, is_active, branch_id) VALUES ($1, 'RM-W', 'Flour', 0, 10, true, $2)`, [rmId, branchId]);
+    await client.query(`INSERT INTO public.raw_material_inventory (raw_material_id, branch_id, quantity, avg_cost) VALUES ($1, $2, 10, 10)`, [rmId, branchId]);
+    await client.query(`INSERT INTO public.raw_material_batches (raw_material_id, branch_id, warehouse_id, quantity, unit_cost, source_type) VALUES ($1, $2, $3, 10, 10, 'opening')`, [rmId, branchId, whId]);
     await client.query(`INSERT INTO public.waste_categories (id, name, name_en) VALUES ($1, 'Test Waste', 'Test Waste')`, [catId]);
   });
 
@@ -86,40 +90,46 @@ describe.skipIf(skip)('Phase 2 — waste center', () => {
     expect(names).toContain('unit_cost');
     expect(names).toContain('total_cost');
     expect(names).toContain('status');
+    expect(names).toContain('warehouse_id');
   });
 
-  it('create_waste_entry RPC creates a pending entry', async () => {
+  it('create_waste_entry RPC creates a pending warehouse-scoped entry without deducting stock', async () => {
     await asAdmin(async () => {
+      const before = await q<{ quantity: string }>(`SELECT quantity::text FROM public.raw_material_inventory WHERE raw_material_id = $1 AND branch_id = $2`, [rmId, branchId]);
       const result = await q<{ create_waste_entry: string }>(
-        `SELECT public.create_waste_entry($1, $2, $3, $4, $5, $6)`,
-        [branchId, catId, 'raw_material', 5, 10, 'Test waste']
+        `SELECT public.create_waste_entry($1, $2, $3, $4, $5, $6, $7, NULL, NULL, $8, NULL)`,
+        [branchId, catId, 'raw_material', 5, 10, 'Test waste', rmId, whId]
       );
       wasteId = result[0].create_waste_entry;
       expect(wasteId).toBeTruthy();
 
-      const rows = await q<{ status: string; waste_type: string; quantity: string }>(
-        `SELECT status, waste_type, quantity::text FROM public.waste_entries WHERE id = $1`, [wasteId]
+      const rows = await q<{ status: string; waste_type: string; quantity: string; warehouse_id: string }>(
+        `SELECT status, waste_type, quantity::text, warehouse_id FROM public.waste_entries WHERE id = $1`, [wasteId]
       );
       expect(rows[0].status).toBe('pending');
       expect(rows[0].waste_type).toBe('raw_material');
+      expect(rows[0].warehouse_id).toBe(whId);
+      const after = await q<{ quantity: string }>(`SELECT quantity::text FROM public.raw_material_inventory WHERE raw_material_id = $1 AND branch_id = $2`, [rmId, branchId]);
+      expect(Number(after[0].quantity)).toBe(Number(before[0].quantity));
     });
   });
 
-  it('approve_waste RPC sets status to approved', async () => {
+  it('approve_waste deducts exactly once from the selected warehouse and sets approved', async () => {
     await asAdmin(async () => {
       await client.query(`SELECT public.approve_waste($1, true)`, [wasteId]);
-      const rows = await q<{ status: string }>(
-        `SELECT status FROM public.waste_entries WHERE id = $1`, [wasteId]
-      );
+      const rows = await q<{ status: string }>(`SELECT status FROM public.waste_entries WHERE id = $1`, [wasteId]);
       expect(rows[0].status).toBe('approved');
+      const stock = await q<{ quantity: string }>(`SELECT quantity::text FROM public.raw_material_batches WHERE raw_material_id = $1 AND branch_id = $2 AND warehouse_id = $3`, [rmId, branchId, whId]);
+      expect(Number(stock[0].quantity)).toBe(5);
     });
   });
 
-  it('approve_waste rejects if already approved', async () => {
+  it('approve_waste rejects if already approved and cannot double-deduct', async () => {
     await asAdmin(async () => {
-      await expectDbError(() =>
-        client.query(`SELECT public.approve_waste($1, true)`, [wasteId])
-      );
+      const before = await q<{ quantity: string }>(`SELECT quantity::text FROM public.raw_material_batches WHERE raw_material_id = $1 AND branch_id = $2 AND warehouse_id = $3`, [rmId, branchId, whId]);
+      await expectDbError(() => client.query(`SELECT public.approve_waste($1, true)`, [wasteId]));
+      const after = await q<{ quantity: string }>(`SELECT quantity::text FROM public.raw_material_batches WHERE raw_material_id = $1 AND branch_id = $2 AND warehouse_id = $3`, [rmId, branchId, whId]);
+      expect(Number(after[0].quantity)).toBe(Number(before[0].quantity));
     });
   });
 
@@ -147,7 +157,7 @@ describe.skipIf(skip)('Phase 2 — waste center', () => {
   it('create_waste_entry rejects invalid waste_type', async () => {
     await asAdmin(async () => {
       await expectDbError(() =>
-        client.query(`SELECT public.create_waste_entry($1, $2, $3, $4, $5, $6)`, [branchId, catId, 'invalid', 1, 1, null])
+        client.query(`SELECT public.create_waste_entry($1, $2, $3, $4, $5, $6, $7, NULL, NULL, $8, NULL)`, [branchId, catId, 'invalid', 1, 1, null, rmId, whId])
       );
     });
   });
