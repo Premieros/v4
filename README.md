@@ -1,11 +1,33 @@
-<div align="center">
+# نظام نقاط البيع | POS System
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+نظام إدارة نقاط البيع والمخزون متعدد الفروع.
 
-  <h1>Built with AI Studio</h2>
+## Setup
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+```bash
+npm install
+npm run dev
+```
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## Build
 
-</div>
+```bash
+npm run build
+```
+
+## Deploy to GitHub Pages
+
+1. Push to the `main` branch.
+2. Go to **Settings > Pages > Build and deployment > Source** and select **GitHub Actions**.
+3. The workflow in `.github/workflows/deploy.yml` builds and deploys automatically.
+
+The app uses `HashRouter` and a relative base path (`vite.config.ts` → `base: './'`) so the same build works under `https://<user>.github.io/<repo>/` and on Netlify (see `netlify.toml`).
+
+## Environment
+
+Create a `.env` file with your Supabase credentials:
+
+```
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+```

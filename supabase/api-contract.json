@@ -1,0 +1,851 @@
+{
+  "generated_at": "2026-08-29T20:40:59.753Z",
+  "source": "scripts/db/gen-contract.js (extracted from src/api/domains + src)",
+  "rpcs": [
+    {
+      "name": "activate_subscription",
+      "params": [
+        "activate",
+        "billing_period",
+        "branch_id",
+        "plan_id"
+      ]
+    },
+    {
+      "name": "add_inventory_batch",
+      "params": [
+        "batch_number",
+        "branch_id",
+        "expiry_date",
+        "notes",
+        "product_id",
+        "production_date",
+        "quantity",
+        "source_type",
+        "unit_cost",
+        "warehouse_id"
+      ]
+    },
+    {
+      "name": "add_statement_line",
+      "params": [
+        "amount",
+        "description",
+        "reconciliation_id",
+        "reference",
+        "statement_date"
+      ]
+    },
+    {
+      "name": "add_stock_count_item",
+      "params": [
+        "counted_quantity",
+        "product_id",
+        "reason",
+        "stock_count_id"
+      ]
+    },
+    {
+      "name": "adjust_raw_stock",
+      "params": [
+        "branch_id",
+        "new_quantity",
+        "raw_material_id",
+        "reason"
+      ]
+    },
+    {
+      "name": "adjust_stock",
+      "params": [
+        "inventory_id",
+        "new_quantity",
+        "reason"
+      ]
+    },
+    {
+      "name": "admin_data_delete_section",
+      "params": [
+        "branch_id",
+        "section"
+      ]
+    },
+    {
+      "name": "admin_data_seed_all",
+      "params": [
+        "branch_id"
+      ]
+    },
+    {
+      "name": "apply_stock_count",
+      "params": [
+        "stock_count_id"
+      ]
+    },
+    {
+      "name": "approve_stock_count",
+      "params": [
+        "stock_count_id"
+      ]
+    },
+    {
+      "name": "approve_warehouse_transfer",
+      "params": [
+        "transfer_id"
+      ]
+    },
+    {
+      "name": "cancel_production_order",
+      "params": [
+        "order_id",
+        "reason"
+      ]
+    },
+    {
+      "name": "close_shift",
+      "params": [
+        "actual_amount",
+        "notes",
+        "shift_id"
+      ]
+    },
+    {
+      "name": "complete_bank_reconciliation",
+      "params": [
+        "reconciliation_id"
+      ]
+    },
+    {
+      "name": "complete_production_order",
+      "params": [
+        "order_id",
+        "waste"
+      ]
+    },
+    {
+      "name": "create_bank_reconciliation",
+      "params": [
+        "branch_id",
+        "statement_balance",
+        "statement_date",
+        "treasury_account_id"
+      ]
+    },
+    {
+      "name": "create_order",
+      "params": [
+        "branch_id",
+        "cashier_id",
+        "customer_id",
+        "discount_amount",
+        "discount_type",
+        "guest_count",
+        "items",
+        "notes",
+        "order_type",
+        "subtotal",
+        "table_id",
+        "tax_amount",
+        "total"
+      ]
+    },
+    {
+      "name": "create_organization_branch",
+      "params": [
+        "address",
+        "name",
+        "name_en",
+        "organization_id",
+        "phone"
+      ]
+    },
+    {
+      "name": "create_production_order",
+      "params": [
+        "batch_number",
+        "branch_id",
+        "notes",
+        "planned_at",
+        "product_id",
+        "quantity",
+        "warehouse_id"
+      ]
+    },
+    {
+      "name": "create_purchase_order",
+      "params": [
+        "branch_id",
+        "items",
+        "notes",
+        "payment_method",
+        "quotation_id",
+        "supplier_id",
+        "warehouse_id"
+      ]
+    },
+    {
+      "name": "create_purchase_request",
+      "params": [
+        "branch_id",
+        "expected_date",
+        "items",
+        "notes",
+        "priority",
+        "supplier_id"
+      ]
+    },
+    {
+      "name": "create_rfq",
+      "params": [
+        "branch_id",
+        "due_date",
+        "items",
+        "notes",
+        "request_id"
+      ]
+    },
+    {
+      "name": "create_stock_count",
+      "params": [
+        "branch_id",
+        "count_type",
+        "items",
+        "notes",
+        "warehouse_id"
+      ]
+    },
+    {
+      "name": "create_user",
+      "params": [
+        "branch_id",
+        "email",
+        "full_name",
+        "is_active",
+        "password",
+        "role",
+        "username"
+      ]
+    },
+    {
+      "name": "create_warehouse_transfer",
+      "params": [
+        "branch_id",
+        "from_warehouse_id",
+        "items",
+        "notes",
+        "reason",
+        "to_warehouse_id"
+      ]
+    },
+    {
+      "name": "deactivate_branch",
+      "params": [
+        "branch_id"
+      ]
+    },
+    {
+      "name": "delete_demo_data",
+      "params": [
+        "branch_id"
+      ]
+    },
+    {
+      "name": "delete_user",
+      "params": [
+        "user_id"
+      ]
+    },
+    {
+      "name": "detach_order",
+      "params": [
+        "order_id"
+      ]
+    },
+    {
+      "name": "get_active_shift",
+      "params": [
+        "branch_id"
+      ]
+    },
+    {
+      "name": "get_aging_summary",
+      "params": [
+        "as_of",
+        "branch_id"
+      ]
+    },
+    {
+      "name": "get_ap_aging",
+      "params": [
+        "as_of",
+        "branch_id"
+      ]
+    },
+    {
+      "name": "get_ar_aging",
+      "params": [
+        "as_of",
+        "branch_id"
+      ]
+    },
+    {
+      "name": "get_balance_sheet",
+      "params": [
+        "as_of",
+        "branch_id"
+      ]
+    },
+    {
+      "name": "get_bank_reconciliation",
+      "params": [
+        "reconciliation_id"
+      ]
+    },
+    {
+      "name": "get_cash_flow",
+      "params": [
+        "branch_id",
+        "from_date",
+        "to_date"
+      ]
+    },
+    {
+      "name": "get_cost_history",
+      "params": [
+        "limit",
+        "product_id"
+      ]
+    },
+    {
+      "name": "get_costing_overview",
+      "params": [
+        "branch_id"
+      ]
+    },
+    {
+      "name": "get_expiring_batches",
+      "params": [
+        "branch_id",
+        "horizon_days",
+        "warehouse_id"
+      ]
+    },
+    {
+      "name": "get_general_ledger",
+      "params": [
+        "account_id",
+        "branch_id",
+        "from_date",
+        "to_date"
+      ]
+    },
+    {
+      "name": "get_income_statement",
+      "params": [
+        "branch_id",
+        "from_date",
+        "to_date"
+      ]
+    },
+    {
+      "name": "get_journals",
+      "params": [
+        "branch_id",
+        "from_date",
+        "reference_type",
+        "search",
+        "to_date"
+      ]
+    },
+    {
+      "name": "get_login_email",
+      "params": [
+        "username"
+      ]
+    },
+    {
+      "name": "get_low_stock_alerts",
+      "params": [
+        "branch_id",
+        "warehouse_id"
+      ]
+    },
+    {
+      "name": "get_low_stock_summary",
+      "params": [
+        "branch_id",
+        "warehouse_id"
+      ]
+    },
+    {
+      "name": "get_order_margin",
+      "params": [
+        "branch_id",
+        "from",
+        "to"
+      ]
+    },
+    {
+      "name": "get_party_statement",
+      "params": [
+        "branch_id",
+        "from_date",
+        "party_id",
+        "side",
+        "to_date"
+      ]
+    },
+    {
+      "name": "get_product_costing_detail",
+      "params": [
+        "branch_id",
+        "product_id"
+      ]
+    },
+    {
+      "name": "get_purchase_backorders",
+      "params": [
+        "branch_id"
+      ]
+    },
+    {
+      "name": "get_purchase_receipts",
+      "params": [
+        "branch_id"
+      ]
+    },
+    {
+      "name": "get_rfq_comparison",
+      "params": [
+        "rfq_id"
+      ]
+    },
+    {
+      "name": "get_stock_valuation",
+      "params": [
+        "branch_id",
+        "warehouse_id"
+      ]
+    },
+    {
+      "name": "get_stock_valuation_summary",
+      "params": [
+        "branch_id",
+        "warehouse_id"
+      ]
+    },
+    {
+      "name": "get_supplier_evaluation",
+      "params": [
+        "branch_id"
+      ]
+    },
+    {
+      "name": "get_supplier_price_impact",
+      "params": [
+        "supplier_id"
+      ]
+    },
+    {
+      "name": "get_treasury_balances",
+      "params": [
+        "branch_id"
+      ]
+    },
+    {
+      "name": "get_trial_balance",
+      "params": [
+        "branch_id",
+        "to_date"
+      ]
+    },
+    {
+      "name": "get_trial_balance_summary",
+      "params": [
+        "branch_id",
+        "to_date"
+      ]
+    },
+    {
+      "name": "match_bank_line",
+      "params": [
+        "journal_entry_id",
+        "line_id"
+      ]
+    },
+    {
+      "name": "next_document_number",
+      "params": [
+        "type"
+      ]
+    },
+    {
+      "name": "open_shift",
+      "params": [
+        "branch_id",
+        "notes",
+        "opening_amount"
+      ]
+    },
+    {
+      "name": "pay_supplier",
+      "params": [
+        "amount",
+        "branch_id",
+        "notes",
+        "payment_method",
+        "purchase_id",
+        "supplier_id"
+      ]
+    },
+    {
+      "name": "post_manual_journal",
+      "params": [
+        "branch_id",
+        "description",
+        "lines"
+      ]
+    },
+    {
+      "name": "process_purchase",
+      "params": [
+        "branch_id",
+        "discount_amount",
+        "invoice_number",
+        "items",
+        "notes",
+        "paid_amount",
+        "payment_method",
+        "status",
+        "subtotal",
+        "supplier_id",
+        "tax_amount",
+        "total",
+        "warehouse_id"
+      ]
+    },
+    {
+      "name": "process_refund",
+      "params": [
+        "items",
+        "reason",
+        "sale_id"
+      ]
+    },
+    {
+      "name": "process_sale",
+      "params": [
+        "bonus_amount",
+        "branch_id",
+        "customer_id",
+        "discount_amount",
+        "discount_type",
+        "guest_count",
+        "invoice_number",
+        "items",
+        "order_id",
+        "order_type",
+        "paid_amount",
+        "payment_method",
+        "salesperson_id",
+        "shift_id",
+        "status",
+        "subtotal",
+        "table_id",
+        "tax_amount",
+        "total",
+        "warehouse_id"
+      ]
+    },
+    {
+      "name": "process_transfer",
+      "params": [
+        "amount",
+        "branch_id",
+        "from_account_id",
+        "notes",
+        "to_account_id"
+      ]
+    },
+    {
+      "name": "process_treasury_deposit",
+      "params": [
+        "account_id",
+        "amount",
+        "branch_id",
+        "notes"
+      ]
+    },
+    {
+      "name": "process_treasury_withdrawal",
+      "params": [
+        "account_id",
+        "amount",
+        "branch_id",
+        "notes"
+      ]
+    },
+    {
+      "name": "receive_payment",
+      "params": [
+        "amount",
+        "branch_id",
+        "customer_id",
+        "notes",
+        "payment_method",
+        "sale_id"
+      ]
+    },
+    {
+      "name": "receive_purchase_order",
+      "params": [
+        "purchase_id",
+        "receipt_items"
+      ]
+    },
+    {
+      "name": "record_login_failure",
+      "params": [
+        "username"
+      ]
+    },
+    {
+      "name": "record_login_success",
+      "params": [
+        "user_id"
+      ]
+    },
+    {
+      "name": "record_supplier_quotation",
+      "params": [
+        "delivery_days",
+        "items",
+        "notes",
+        "rfq_id",
+        "supplier_id",
+        "valid_until"
+      ]
+    },
+    {
+      "name": "register_tenant",
+      "params": [
+        "address",
+        "currency",
+        "email",
+        "owner_name",
+        "password",
+        "phone",
+        "store_name",
+        "store_name_en"
+      ]
+    },
+    {
+      "name": "reject_stock_count",
+      "params": [
+        "reason",
+        "stock_count_id"
+      ]
+    },
+    {
+      "name": "reject_warehouse_transfer",
+      "params": [
+        "reason",
+        "transfer_id"
+      ]
+    },
+    {
+      "name": "remove_stock_count_item",
+      "params": [
+        "product_id",
+        "stock_count_id"
+      ]
+    },
+    {
+      "name": "replace_product_units",
+      "params": [
+        "product_id",
+        "units"
+      ]
+    },
+    {
+      "name": "seed_demo_data",
+      "params": [
+        "branch_id"
+      ]
+    },
+    {
+      "name": "seed_opening_balances",
+      "params": [
+        "branch_id"
+      ]
+    },
+    {
+      "name": "select_supplier_quotation",
+      "params": [
+        "quotation_id"
+      ]
+    },
+    {
+      "name": "send_to_kitchen",
+      "params": [
+        "order_id",
+        "sent_by"
+      ]
+    },
+    {
+      "name": "set_order_status",
+      "params": [
+        "notes",
+        "order_id",
+        "status"
+      ]
+    },
+    {
+      "name": "set_table_status",
+      "params": [
+        "status",
+        "table_id"
+      ]
+    },
+    {
+      "name": "start_production_order",
+      "params": [
+        "order_id"
+      ]
+    },
+    {
+      "name": "submit_stock_count",
+      "params": [
+        "stock_count_id"
+      ]
+    },
+    {
+      "name": "subscription_status",
+      "params": [
+        "branch_id"
+      ]
+    },
+    {
+      "name": "update_branch",
+      "params": [
+        "address",
+        "branch_id",
+        "is_active",
+        "name",
+        "name_en",
+        "phone"
+      ]
+    },
+    {
+      "name": "update_order",
+      "params": [
+        "customer_id",
+        "discount_amount",
+        "discount_type",
+        "guest_count",
+        "items",
+        "notes",
+        "order_id",
+        "order_type",
+        "status",
+        "subtotal",
+        "table_id",
+        "tax_amount",
+        "total"
+      ]
+    },
+    {
+      "name": "update_purchase_order_status",
+      "params": [
+        "purchase_id",
+        "status"
+      ]
+    },
+    {
+      "name": "update_purchase_request_status",
+      "params": [
+        "request_id",
+        "status"
+      ]
+    },
+    {
+      "name": "update_rfq_status",
+      "params": [
+        "rfq_id",
+        "status"
+      ]
+    },
+    {
+      "name": "update_stock_count_item",
+      "params": [
+        "counted_quantity",
+        "product_id",
+        "reason",
+        "stock_count_id"
+      ]
+    },
+    {
+      "name": "update_user_password",
+      "params": [
+        "new_password",
+        "user_id"
+      ]
+    }
+  ],
+  "tables": [
+    "audit_log",
+    "branch_settings",
+    "branch_subscriptions",
+    "branches",
+    "categories",
+    "chart_of_accounts",
+    "customers",
+    "dining_areas",
+    "dining_tables",
+    "expenses",
+    "inventory",
+    "inventory_batches",
+    "inventory_movements",
+    "inventory_unit_productions",
+    "inventory_unit_recipes",
+    "inventory_units",
+    "kitchen_stations",
+    "measurement_units",
+    "order_items",
+    "order_kitchen_sends",
+    "orders",
+    "organization_members",
+    "organizations",
+    "plan_features",
+    "plan_prices",
+    "plans",
+    "product_components",
+    "product_unit_links",
+    "product_units",
+    "production_waste",
+    "products",
+    "purchase_items",
+    "purchase_request_items",
+    "purchase_requests",
+    "purchases",
+    "raw_material_batches",
+    "raw_material_inventory",
+    "raw_material_movements",
+    "raw_materials",
+    "recipe_items",
+    "recipes",
+    "roles",
+    "sale_items",
+    "sales",
+    "settings",
+    "stock_transactions",
+    "subscription_payments",
+    "subscription_plans",
+    "subscriptions",
+    "suppliers",
+    "treasury_accounts",
+    "users",
+    "warehouses",
+    "waste_categories",
+    "waste_entries"
+  ]
+}

@@ -1,0 +1,100 @@
+name: Verify main
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VITE_SUPABASE_URL: https://azzdesuowpdcoflmyezn.supabase.co
+  VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'dummy_anon_key_for_ci_build' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Typecheck application and test suites
+        run: npm run typecheck:all
+      - run: npm run test:unit
+      - run: npm run build
+
+  db:
+    needs: verify
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SUPABASE_DB_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - name: Apply auth stub (CI only, never on real Supabase)
+        run: node scripts/db/apply-migration.js --file supabase/ci/stub_auth.sql
+      - name: Apply canonical migrations
+        run: node scripts/db/apply-migration.js --dir supabase/migrations
+      - name: Verify schema
+        run: node scripts/db/verify-schema.js
+      - name: Isolate subscription guard for order integration fixtures
+        run: node scripts/db/apply-migration.js --file supabase/ci/disable_subscription_guard.sql
+      - name: Seed raw-material branch helper (CI only, never on real Supabase)
+        run: node scripts/db/apply-migration.js --file supabase/ci/seed_raw_material_branch.sql
+      - name: Run integration and security/RLS regression tests
+        run: npm run test:integration
+
+  browser-smoke:
+    needs: [verify, db]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build application
+        run: npm run build
+      - name: Run Playwright smoke tests
+        run: npx playwright test --project=chromium
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verify-playwright-report
+          path: playwright-report/
+          retention-days: 7
