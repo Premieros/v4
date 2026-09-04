@@ -13,8 +13,10 @@
 //     a sha256 checksum, so re-runs are idempotent and tampering is detected.
 //   * --dry-run runs the target inside a transaction that is always rolled
 //     back: it previews the outcome without touching the database.
+//   * Database isolation is mandatory: only the v4 Supabase project or a local
+//     PostgreSQL instance used by CI/development is accepted.
 //
-// Configuration is read ONLY from .env (never from the shell / repo):
+// Configuration is read from environment/.env:
 //   SUPABASE_DB_URL=postgresql://postgres.<ref>:<password>@<host>:5432/postgres
 //   (falls back to DATABASE_URL / POSTGRES_URL if SUPABASE_DB_URL is absent)
 // ============================================================================
@@ -24,13 +26,11 @@ import { join, resolve, basename } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { assertAllowedDatabaseUrl } from './project-isolation.js';
 
 const __dirname = resolve(fileURLToPath(import.meta.url), '..');
 const ROOT = resolve(__dirname, '..', '..');
 
-// ---------------------------------------------------------------------------
-// Minimal .env parser (no dependency). Lines: KEY=VALUE, # comments, quotes.
-// ---------------------------------------------------------------------------
 function loadEnv(filePath) {
   const env = {};
   let raw;
@@ -62,17 +62,13 @@ function parseArgs(argv) {
     else if (arg === '--dir') opts.dir = argv[++i];
     else if (arg === '--file') opts.file = argv[++i];
     else if (arg === '--help' || arg === '-h') {
-      console.log(`Usage:
-  node scripts/db/apply-migration.js [--dry-run] [--dir supabase/migrations]
-  node scripts/db/apply-migration.js [--dry-run] --file <path>`);
+      console.log(`Usage:\n  node scripts/db/apply-migration.js [--dry-run] [--dir supabase/migrations]\n  node scripts/db/apply-migration.js [--dry-run] --file <path>`);
       process.exit(0);
     }
   }
   return opts;
 }
 
-// Neutralize explicit transaction control lines so dry-run can wrap the whole
-// file in one transaction and roll it back (exact copy is used for real runs).
 function neutralizeTxnControl(sql) {
   return sql
     .split('\n')
@@ -90,8 +86,6 @@ function sha256(text) {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
-// SSL on when the URL opts in (sslmode=require/verify-full) — Supabase pooler
-// needs it, a local Postgres must not use it.
 function buildSsl(connectionString) {
   const sslMode = (connectionString.match(/sslmode=([^&\s]+)/) || [])[1];
   if (sslMode && sslMode !== 'disable') return { rejectUnauthorized: false };
@@ -101,12 +95,20 @@ function buildSsl(connectionString) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   const env = loadEnv(join(ROOT, '.env'));
-  const dbUrl =
+  const rawDbUrl =
     process.env.SUPABASE_DB_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL ||
     env.SUPABASE_DB_URL || env.DATABASE_URL || env.POSTGRES_URL;
 
-  if (!dbUrl) {
+  if (!rawDbUrl) {
     console.error('ERROR: no database URL found. Add SUPABASE_DB_URL (or DATABASE_URL) to .env.');
+    process.exit(1);
+  }
+
+  let dbUrl;
+  try {
+    dbUrl = assertAllowedDatabaseUrl(rawDbUrl, { allowLocal: true, label: 'migration database URL' });
+  } catch (error) {
+    console.error(`ERROR: ${error.message}`);
     process.exit(1);
   }
 
@@ -143,7 +145,6 @@ async function main() {
   const failed = [];
 
   try {
-    // Record table for already-applied files (additive bootstrap, safe on any DB).
     await client.query(`
       CREATE TABLE IF NOT EXISTS public.schema_migrations (
         id bigserial PRIMARY KEY,
