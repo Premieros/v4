@@ -2,7 +2,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import {
-  DEFAULT_ROLE_PERMISSIONS,
   ROLE_META,
   type Permission,
   type Role,
@@ -53,48 +52,52 @@ export function RolesProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
+
+    setLoading(true);
     const { data, error } = await supabase.from('roles').select('*');
-    if (!error && Array.isArray(data)) {
-      const list: RoleDefRow[] = (data as Array<{
-        role: string;
-        name_ar: string;
-        name_en: string;
-        permissions: unknown;
-        updated_at?: string;
-        scope: RoleScope;
-        branch_id: string | null;
-        description_ar: string | null;
-        description_en: string | null;
-        is_active: boolean;
-      }>).map((row) => ({
-        role: row.role,
-        name_ar: row.name_ar,
-        name_en: row.name_en,
-        permissions: normalizePermissions(row.permissions),
-        updated_at: row.updated_at,
-        scope: row.scope ?? 'global',
-        branch_id: row.branch_id ?? null,
-        description_ar: row.description_ar ?? null,
-        description_en: row.description_en ?? null,
-        is_active: row.is_active ?? true,
-      }));
-      setRolesList(list);
+    if (error || !Array.isArray(data)) {
+      // Permission resolution is intentionally fail-closed. Never fall back to
+      // role-name defaults when the DB permission contract is unavailable.
+      setRolesList([]);
+      setLoading(false);
+      return;
     }
+
+    const list: RoleDefRow[] = (data as Array<{
+      role: string;
+      name_ar: string;
+      name_en: string;
+      permissions: unknown;
+      updated_at?: string;
+      scope: RoleScope;
+      branch_id: string | null;
+      description_ar: string | null;
+      description_en: string | null;
+      is_active: boolean;
+    }>).map((row) => ({
+      role: row.role,
+      name_ar: row.name_ar,
+      name_en: row.name_en,
+      permissions: normalizePermissions(row.permissions),
+      updated_at: row.updated_at,
+      scope: row.scope ?? 'global',
+      branch_id: row.branch_id ?? null,
+      description_ar: row.description_ar ?? null,
+      description_en: row.description_en ?? null,
+      is_active: row.is_active ?? true,
+    }));
+
+    setRolesList(list.filter((role) => role.is_active));
     setLoading(false);
   }, [session]);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   const rolePermissionsMap = useMemo(() => {
     const map: Record<string, Permission[]> = {};
     for (const def of rolesList) map[def.role] = def.permissions;
-    if (Object.keys(map).length === 0) {
-      for (const role of Object.keys(DEFAULT_ROLE_PERMISSIONS) as Role[]) {
-        map[role] = DEFAULT_ROLE_PERMISSIONS[role];
-      }
-    }
     return map;
   }, [rolesList]);
 
