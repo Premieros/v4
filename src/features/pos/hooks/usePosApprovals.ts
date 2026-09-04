@@ -55,9 +55,7 @@ export function usePosApprovals() {
   const canApprove =
     user?.role === 'super_admin' ||
     user?.role === 'owner' ||
-    user?.role === 'admin' ||
-    user?.role === 'manager' ||
-    user?.role === 'supervisor';
+    user?.role === 'branch_manager';
 
   const loadRequests = useCallback(async () => {
     setLoading(true);

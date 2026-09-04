@@ -17,6 +17,7 @@ interface Props {
   orderNumber?: string | null;
   type: PosApprovalType;
   initialAmount?: number;
+  currency?: string;
   onApproved: (req: PosApprovalRequest) => void;
 }
 
@@ -28,6 +29,7 @@ export function RequestApprovalDialog({
   orderNumber,
   type,
   initialAmount,
+  currency = 'EGP',
   onApproved,
 }: Props) {
   const { lang } = useLanguage();
@@ -174,7 +176,7 @@ export function RequestApprovalDialog({
             {type === 'discount' && (
               <div>
                 <label className="block text-xs font-bold text-ui-subtle mb-1.5">
-                  {isAr ? 'قيمة الخصم المطلوبة' : 'Requested Discount Amount'}
+                  {isAr ? `قيمة الخصم المطلوبة (${currency})` : `Requested Discount Amount (${currency})`}
                 </label>
                 <input
                   type="number"

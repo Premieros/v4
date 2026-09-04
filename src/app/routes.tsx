@@ -21,6 +21,7 @@ const InventoryPage = lazy(() => import('../features/inventory/pages/InventoryPa
 const WarehousesPage = lazy(() => import('../features/inventory/pages/WarehousesPage').then(m => ({ default: m.WarehousesPage })));
 const RawMaterialsPage = lazy(() => import('../features/manufacturing/pages/RawMaterialsPage').then(m => ({ default: m.RawMaterialsPage })));
 const RecipesPage = lazy(() => import('../features/manufacturing/pages/RecipesPage').then(m => ({ default: m.RecipesPage })));
+const ProductionOrdersPage = lazy(() => import('../features/manufacturing/pages/ProductionOrdersPage').then(m => ({ default: m.ProductionOrdersPage })));
 const TransfersPage = lazy(() => import('../features/inventory/pages/TransfersPage').then(m => ({ default: m.TransfersPage })));
 const InventoryLedgerPage = lazy(() => import('../features/inventory/pages/InventoryLedgerPage').then(m => ({ default: m.InventoryLedgerPage })));
 const StockCountsPage = lazy(() => import('../features/inventory/pages/StockCountsPage').then(m => ({ default: m.StockCountsPage })));
@@ -128,7 +129,7 @@ export function AppRoutes() {
         <Route path={APP_ROUTES.warehouses} element={<ProtectedRoute permission="warehouses.view"><WarehousesPage /></ProtectedRoute>} />
         <Route path={APP_ROUTES.rawMaterials} element={<ProtectedRoute permission="raw_materials.view"><RawMaterialsPage /></ProtectedRoute>} />
         <Route path={APP_ROUTES.recipes} element={<ProtectedRoute permission="recipes.view"><RecipesPage /></ProtectedRoute>} />
-        <Route path={APP_ROUTES.production} element={<Navigate to={APP_ROUTES.recipes} replace />} />
+        <Route path={APP_ROUTES.production} element={<ProtectedRoute permission="production.view"><ProductionOrdersPage /></ProtectedRoute>} />
         <Route path={APP_ROUTES.productionUnits} element={<Navigate to={APP_ROUTES.recipes} replace />} />
         <Route path={APP_ROUTES.transfers} element={<ProtectedRoute permission="inventory.transfers"><TransfersPage /></ProtectedRoute>} />
         <Route path={APP_ROUTES.inventoryLedger} element={<ProtectedRoute permission="inventory.ledger.view"><InventoryLedgerPage /></ProtectedRoute>} />

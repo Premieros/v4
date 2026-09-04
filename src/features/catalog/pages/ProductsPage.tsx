@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Edit2, Trash2, Download, Upload, Barcode as BarcodeIcon, QrCode } from 'lucide-react';
 import { supabase } from '@/api';
 import * as api from '@/api';
@@ -27,6 +28,7 @@ import type { Product, Category, ProductUnit, ProductComponentInput } from '@/li
 const UNIT_NAMES = ['piece', 'carton', 'box', 'pack', 'kg', 'liter', 'meter', 'gram'];
 
 export function ProductsPage() {
+  const navigate = useNavigate();
   const { t, lang } = useLanguage();
   const { show } = useToast();
   const can = useCan();
@@ -106,7 +108,7 @@ export function ProductsPage() {
   );
 
   const openAdd = () => {
-    window.location.hash = '/products/setup';
+    navigate('/products/setup');
   };
 
   const openEdit = async (p: Product) => {

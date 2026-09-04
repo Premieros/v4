@@ -201,13 +201,16 @@ export async function fetchBranchRecipes(branchId: string): Promise<RecipeWithIt
       itemsByRecipe.set(it.recipe_id, list);
     }
 
-    return recipes.map((r: { id: string; product_id: string; yield_quantity: number; products?: { name: string } }) => ({
-      recipe_id: r.id,
-      product_id: r.product_id,
-      product_name: r.products?.name || '',
-      yield_quantity: Number(r.yield_quantity) || 1,
-      items: itemsByRecipe.get(r.id) || [],
-    }));
+    return (recipes as unknown as { id: string; product_id: string; yield_quantity: number; products?: { name: string } | { name: string }[] }[]).map((r) => {
+      const prodName = Array.isArray(r.products) ? r.products[0]?.name : r.products?.name;
+      return {
+        recipe_id: r.id,
+        product_id: r.product_id,
+        product_name: prodName || '',
+        yield_quantity: Number(r.yield_quantity) || 1,
+        items: itemsByRecipe.get(r.id) || [],
+      };
+    });
   } catch (err) {
     console.error('Error fetching recipes:', err);
     return [];

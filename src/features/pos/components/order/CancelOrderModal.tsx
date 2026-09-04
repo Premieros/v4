@@ -32,10 +32,9 @@ export const CancelOrderModal: React.FC<Props> = ({
   const { show } = useToast();
 
   const isManagerOrAdmin =
-    user?.role === 'admin' ||
     user?.role === 'super_admin' ||
-    user?.role === 'manager' ||
-    user?.role === 'supervisor';
+    user?.role === 'owner' ||
+    user?.role === 'branch_manager';
 
   const [isWaste, setIsWaste] = useState<boolean>(false);
   const [reasonCategory, setReasonCategory] = useState<string>('cashier_mistake');
@@ -331,7 +330,7 @@ export const CancelOrderModal: React.FC<Props> = ({
         type="cancel"
         onApproved={(req: PosApprovalRequest) => {
           setApprovalOpen(false);
-          void executeCancel(req.reviewer_id || req.approved_by_name || 'manager');
+          void executeCancel(req.approved_by || req.approved_by_name || 'manager');
         }}
       />
     </>

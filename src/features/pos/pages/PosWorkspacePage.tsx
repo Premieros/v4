@@ -39,7 +39,7 @@ import { VoidItemModal } from '../components/order/VoidItemModal';
 import { CancelOrderModal } from '../components/order/CancelOrderModal';
 import { RawAndManufacturedMaterialsPanel } from '@/features/inventory/components/RawAndManufacturedMaterialsPanel';
 import { RequestApprovalDialog } from '../components/approvals/RequestApprovalDialog';
-import { fetchBranchRawMaterialsStock, fetchBranchRecipes, computeManufacturedSellableStock, type RecipeWithItems } from '../services/kitchenInventory';
+import { fetchBranchRawMaterialsStock, fetchBranchRecipes, computeManufacturedSellableStock, type RecipeWithItems, type RawMaterialStockInfo } from '../services/kitchenInventory';
 
 interface WorkspaceState {
   tableId?: string | null;
@@ -91,7 +91,7 @@ export function PosWorkspacePage() {
   const [viewMode, setViewMode] = useState<'tables' | 'products'>(orderIdParam ? 'products' : 'tables');
   const [showCartManual, setShowCartManual] = useState(false);
   const [rawMaterialsOpen, setRawMaterialsOpen] = useState(false);
-  const [rawStock, setRawStock] = useState<Record<string, number>>({});
+  const [rawStock, setRawStock] = useState<RawMaterialStockInfo[]>([]);
   const [recipesList, setRecipesList] = useState<RecipeWithItems[]>([]);
   const [approvalDialog, setApprovalDialog] = useState<{
     open: boolean;
@@ -146,7 +146,7 @@ export function PosWorkspacePage() {
   const loadStock = useCallback(async (branchId: string) => {
     if (!branchId) {
       setStockMap({});
-      setRawStock({});
+      setRawStock([]);
       setRecipesList([]);
       return;
     }
@@ -176,12 +176,12 @@ export function PosWorkspacePage() {
   }, []);
 
   const sellableStock = useMemo(() => {
-    const fromRecipes = computeManufacturedSellableStock(products, recipesList, rawStock);
+    const fromRecipes = computeManufacturedSellableStock(recipesList, rawStock);
     const map: Record<string, number> = {};
     for (const p of products) {
       if (p.product_type !== 'manufactured') continue;
       if (fromRecipes[p.id] !== undefined) {
-        map[p.id] = fromRecipes[p.id];
+        map[p.id] = fromRecipes[p.id].portions;
         continue;
       }
       const comps = recipeMap[p.id] || [];

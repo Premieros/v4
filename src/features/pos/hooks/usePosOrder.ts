@@ -90,7 +90,7 @@ export function usePosOrder(input: UsePosOrderInput) {
     if (!activeOrderId || !orderCashierId) return true;
     if (!user?.id) return true;
     if (orderCashierId === user.id) return true;
-    if (user.role === 'admin' || user.role === 'super_admin' || user.role === 'manager' || user.role === 'supervisor') return true;
+    if (user.role === 'super_admin' || user.role === 'owner' || user.role === 'branch_manager') return true;
     return false;
   }, [activeOrderId, orderCashierId, user]);
 
