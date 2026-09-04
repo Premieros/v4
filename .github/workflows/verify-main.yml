@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  VITE_SUPABASE_URL: https://azzdesuowpdcoflmyezn.supabase.co
+  VITE_SUPABASE_URL: https://cuitndfayupfysejlpda.supabase.co
   VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'dummy_anon_key_for_ci_build' }}
 
 jobs:
