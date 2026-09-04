@@ -11,14 +11,15 @@ import {
 } from '@/lib/permissionDefs';
 
 describe('isAdminRole', () => {
-  it('treats super_admin and owner as admin', () => {
+  it('treats only super_admin as implicit platform admin', () => {
     expect(isAdminRole('super_admin')).toBe(true);
-    expect(isAdminRole('owner')).toBe(true);
+    expect(isAdminRole('owner')).toBe(false);
   });
 
-  it('treats other roles and undefined as non-admin', () => {
+  it('treats all other roles and empty values as non-admin', () => {
     expect(isAdminRole('cashier')).toBe(false);
     expect(isAdminRole('branch_manager')).toBe(false);
+    expect(isAdminRole('accountant')).toBe(false);
     expect(isAdminRole(null)).toBe(false);
     expect(isAdminRole(undefined)).toBe(false);
   });
@@ -30,73 +31,72 @@ describe('hasPermission', () => {
     expect(hasPermission(undefined, undefined, 'pos.sell')).toBe(false);
   });
 
-  it('admins always have every permission', () => {
+  it('grants super_admin every permission implicitly', () => {
     expect(hasPermission('super_admin', null, 'settings.manage')).toBe(true);
-    expect(hasPermission('owner', {}, 'branches.manage')).toBe(true);
+    expect(hasPermission('super_admin', {}, 'branches.manage')).toBe(true);
   });
 
-  it('resolves from role defaults when no DB map', () => {
-    expect(hasPermission('cashier', null, 'pos.sell')).toBe(true);
-    expect(hasPermission('cashier', null, 'settings.manage')).toBe(false);
-    expect(hasPermission('accountant', null, 'reports.financial')).toBe(true);
+  it('fails closed for every non-super-admin role when DB permissions are unavailable', () => {
+    expect(hasPermission('owner', null, 'branches.manage')).toBe(false);
+    expect(hasPermission('owner', {}, 'settings.manage')).toBe(false);
+    expect(hasPermission('cashier', null, 'pos.sell')).toBe(false);
+    expect(hasPermission('branch_manager', undefined, 'products.manage')).toBe(false);
+    expect(hasPermission('accountant', {}, 'reports.financial')).toBe(false);
   });
 
-  it('POS action permissions follow the default role matrix', () => {
-    expect(hasPermission('cashier', null, 'pos.reprint')).toBe(true);
-    expect(hasPermission('cashier', null, 'pos.discount')).toBe(false);
-    expect(hasPermission('cashier', null, 'pos.change_price')).toBe(false);
-    expect(hasPermission('branch_manager', null, 'pos.discount')).toBe(true);
-    expect(hasPermission('branch_manager', null, 'pos.change_price')).toBe(true);
-    expect(hasPermission('super_admin', null, 'pos.discount')).toBe(true);
-  });
+  it('uses the explicit DB permission map for non-super-admin roles', () => {
+    const map: Record<string, Permission[]> = {
+      owner: ['branches.manage'],
+      cashier: ['pos.sell'],
+      branch_manager: ['products.view', 'products.manage'],
+      accountant: ['reports.financial'],
+    };
 
-  it('print/export/import permissions follow the default role matrix', () => {
-    expect(hasPermission('cashier', null, 'products.print')).toBe(true);
-    expect(hasPermission('cashier', null, 'products.export')).toBe(false);
-    expect(hasPermission('warehouse_manager', null, 'products.export')).toBe(true);
-    expect(hasPermission('warehouse_manager', null, 'products.import')).toBe(true);
-    expect(hasPermission('accountant', null, 'sales.export')).toBe(true);
-    expect(hasPermission('accountant', null, 'reports.print')).toBe(true);
-    expect(hasPermission('branch_manager', null, 'reports.export')).toBe(true);
-    expect(hasPermission('production_manager', null, 'products.import')).toBe(true);
-  });
-
-  it('DB map overrides code defaults', () => {
-    const map: Record<string, Permission[]> = { cashier: ['pos.sell'] };
-    expect(hasPermission('cashier', map, 'sales.view')).toBe(false);
+    expect(hasPermission('owner', map, 'branches.manage')).toBe(true);
+    expect(hasPermission('owner', map, 'settings.manage')).toBe(false);
     expect(hasPermission('cashier', map, 'pos.sell')).toBe(true);
+    expect(hasPermission('cashier', map, 'sales.view')).toBe(false);
+    expect(hasPermission('branch_manager', map, 'products.manage')).toBe(true);
+    expect(hasPermission('accountant', map, 'reports.financial')).toBe(true);
+  });
+
+  it('does not revive template permissions when a DB role is missing', () => {
+    const map: Record<string, Permission[]> = { cashier: ['pos.sell'] };
+    expect(hasPermission('branch_manager', map, 'products.manage')).toBe(false);
+    expect(hasPermission('owner', map, 'branches.manage')).toBe(false);
   });
 });
 
 describe('permission model integrity', () => {
-  it('all role defaults only reference known permissions', () => {
+  it('all role templates only reference known permissions', () => {
     const known = new Set<Permission>(ALL_PERMISSIONS);
     for (const role of Object.keys(DEFAULT_ROLE_PERMISSIONS) as Role[]) {
-      for (const p of DEFAULT_ROLE_PERMISSIONS[role]) {
-        expect(known.has(p), `${role} references unknown permission ${p}`).toBe(true);
+      for (const permission of DEFAULT_ROLE_PERMISSIONS[role]) {
+        expect(known.has(permission), `${role} references unknown permission ${permission}`).toBe(true);
       }
     }
   });
 
-  it('every role in ROLE_META has defaults', () => {
+  it('every role in ROLE_META has a seed/edit template', () => {
     for (const role of Object.keys(ROLE_META) as Role[]) {
       expect(DEFAULT_ROLE_PERMISSIONS[role]).toBeDefined();
       expect(DEFAULT_ROLE_PERMISSIONS[role].length).toBeGreaterThan(0);
     }
   });
 
-  it('every permission appears in a group (reviewable in the settings UI)', () => {
+  it('every permission appears in a settings group', () => {
     const grouped = new Set<Permission>();
-    for (const g of PERMISSION_GROUPS) {
-      for (const p of g.permissions) grouped.add(p);
+    for (const group of PERMISSION_GROUPS) {
+      for (const permission of group.permissions) grouped.add(permission);
     }
-    for (const p of ALL_PERMISSIONS) {
-      expect(grouped.has(p), `${p} missing from PERMISSION_GROUPS`).toBe(true);
+    for (const permission of ALL_PERMISSIONS) {
+      expect(grouped.has(permission), `${permission} missing from PERMISSION_GROUPS`).toBe(true);
     }
   });
 
-  it('admin roles have full permission sets', () => {
+  it('templates are configuration defaults, not runtime authorization bypasses', () => {
     expect(DEFAULT_ROLE_PERMISSIONS.super_admin).toHaveLength(ALL_PERMISSIONS.length);
     expect(DEFAULT_ROLE_PERMISSIONS.owner).toHaveLength(ALL_PERMISSIONS.length);
+    expect(hasPermission('owner', null, 'branches.manage')).toBe(false);
   });
 });
