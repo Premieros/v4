@@ -43,19 +43,22 @@ export function useUserBranches() {
         return;
       }
 
-      const { data: accessData, error: accessErr } = await supabase.rpc('get_user_branch_access', {
-        p_user_id: user.id,
-      });
+      // Permission does not grant branch access. For every non-Super Admin
+      // account, only explicit user_branch_access rows are authoritative here.
+      // This deliberately ignores legacy org-role expansion from the old RPC.
+      const { data: grants, error: grantsError } = await supabase
+        .from('user_branch_access')
+        .select('branch_id')
+        .eq('user_id', user.id);
 
-      // Fail closed: an unavailable/empty grant contract never expands access.
-      if (accessErr || !Array.isArray(accessData)) {
+      if (grantsError || !Array.isArray(grants)) {
         setAccessibleBranches([]);
         return;
       }
 
       const allowedIds = new Set(
-        accessData
-          .map((a: { branch_id?: string | null }) => a.branch_id)
+        grants
+          .map((grant: { branch_id?: string | null }) => grant.branch_id)
           .filter((id): id is string => Boolean(id))
       );
       setAccessibleBranches(allList.filter((branch) => allowedIds.has(branch.id)));
@@ -87,8 +90,9 @@ export function useUserBranches() {
   }, [loading, accessibleBranches, activeBranchId, isAdmin, setActiveBranchId]);
 
   const canSwitch = isAdmin || accessibleBranches.length > 1;
-  const currentBranch = accessibleBranches.find((b) => b.id === activeBranchId) ||
-    (isAdmin ? allBranches.find((b) => b.id === activeBranchId) : undefined) || null;
+  const currentBranch = accessibleBranches.find((branch) => branch.id === activeBranchId)
+    || (isAdmin ? allBranches.find((branch) => branch.id === activeBranchId) : undefined)
+    || null;
 
   return {
     accessibleBranches,
