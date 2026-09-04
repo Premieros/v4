@@ -2,6 +2,8 @@ import { Modal } from './Modal';
 import { Button } from './Button';
 import { AlertTriangle } from 'lucide-react';
 
+type ConfirmVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline' | 'success' | 'warning';
+
 interface ConfirmDialogProps {
   open?: boolean;
   isOpen?: boolean;
@@ -11,10 +13,28 @@ interface ConfirmDialogProps {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  confirmText?: string;
+  cancelText?: string;
+  variant?: ConfirmVariant;
 }
 
-export function ConfirmDialog({ open, isOpen, onClose, onConfirm, title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel' }: ConfirmDialogProps) {
+export function ConfirmDialog({
+  open,
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  confirmLabel,
+  cancelLabel,
+  confirmText,
+  cancelText,
+  variant = 'danger',
+}: ConfirmDialogProps) {
   const isDialogOpen = open ?? isOpen ?? false;
+  const resolvedConfirmLabel = confirmLabel ?? confirmText ?? 'Confirm';
+  const resolvedCancelLabel = cancelLabel ?? cancelText ?? 'Cancel';
+
   return (
     <Modal open={isDialogOpen} onClose={onClose} title={title} size="sm">
       <div className="flex flex-col gap-5">
@@ -25,8 +45,8 @@ export function ConfirmDialog({ open, isOpen, onClose, onConfirm, title, message
           <p className="text-sm text-ui-muted pt-2 leading-relaxed">{message}</p>
         </div>
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>{cancelLabel}</Button>
-          <Button variant="danger" onClick={() => { onConfirm(); onClose(); }}>{confirmLabel}</Button>
+          <Button variant="secondary" onClick={onClose}>{resolvedCancelLabel}</Button>
+          <Button variant={variant} onClick={() => { onConfirm(); onClose(); }}>{resolvedConfirmLabel}</Button>
         </div>
       </div>
     </Modal>

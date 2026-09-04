@@ -26,6 +26,10 @@ describe.skipIf(skip)('floor plan + open orders (036-039)', () => {
   beforeAll(async () => {
     client = openDb(dbUrl!); await client.connect(); await client.query('BEGIN');
     await client.query('ALTER TABLE public.users DISABLE TRIGGER trg_users_role_guard');
+    // This suite validates order/floor lifecycle, not the cashier template. Grant
+    // the legacy fixture the exact actions it exercises inside this rollback-only
+    // transaction, while branch access remains explicit per user.
+    await client.query(`UPDATE public.roles SET permissions = permissions || '["pos.order.create","pos.order.edit","pos.order.hold","pos.order.send_kitchen","pos.payment.collect","floor_plan.manage"]'::jsonb WHERE role = 'cashier'`);
     const orgId = randomUUID();
     await client.query(`INSERT INTO public.organizations (id, name, slug) VALUES ($1, $2, $3)`, [orgId, 'FP Org', `fp-${randomUUID().slice(0, 8)}`]);
   const seedBranch = async (branchId: string, whId: string, prodId: string, unitId: string, tableId: string, cashierId: string, name: string) => {
@@ -38,6 +42,7 @@ describe.skipIf(skip)('floor plan + open orders (036-039)', () => {
       await client.query(`INSERT INTO public.dining_tables (id, name, branch_id, capacity, status) VALUES ($1, $2, $3, 4, 'vacant')`, [tableId, 'T1', branchId]);
       await client.query(`INSERT INTO public.users (id, email, full_name, role, branch_id, is_active) VALUES ($1, $2, $3, 'cashier', $4, true)`, [cashierId, `fp-${randomUUID()}@test.local`, name, branchId]);
       await client.query(`INSERT INTO public.organization_members (organization_id, user_id, membership_role, is_active) VALUES ($1, $2, 'member', true)`, [orgId, cashierId]);
+      await client.query(`INSERT INTO public.user_branch_access (user_id, branch_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [cashierId, branchId]);
       await client.query(`INSERT INTO public.shifts (branch_id, cashier_id, opening_amount, status) VALUES ($1, $2, 0, 'open')`, [branchId, cashierId]);
       await client.query(`SELECT public.ensure_chart_of_accounts($1)`, [branchId]);
       await client.query(`SELECT public.seed_account_mappings($1)`, [branchId]);

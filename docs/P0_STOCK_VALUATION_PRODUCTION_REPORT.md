@@ -18,7 +18,7 @@ in the schema cache
 نفس الاستجابة بالضبط أعادها REST probe مباشرة على Production:
 
 ```
-POST https://lwnsdsncmlsroiswgoga.supabase.co/rest/v1/rpc/get_stock_valuation
+POST https://cuitndfayupfysejlpda.supabase.co/rest/v1/rpc/get_stock_valuation
   -> 404 {"code":"PGRST202", ...}
 ```
 

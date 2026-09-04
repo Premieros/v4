@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/api';
 import { useAuth } from '@/context/AuthContext';
 import { useActiveBranchId } from '@/lib/activeBranch';
+import { useCan } from '@/lib/permissions';
 import {
   type PosApprovalRequest,
+  type PosApprovalType,
   fetchPendingApprovals,
   respondToApprovalRequest,
 } from '../services/approvals';
 
-// Shared ref-counted channel across all components calling usePosApprovals
 type ApprovalListener = () => void;
 const approvalListeners = new Set<ApprovalListener>();
 let sharedApprovalsChannel: ReturnType<typeof supabase.channel> | null = null;
@@ -48,14 +49,26 @@ function subscribeToApprovals(listener: ApprovalListener): () => void {
 
 export function usePosApprovals() {
   const { user } = useAuth();
+  const can = useCan();
   const [activeBranchId] = useActiveBranchId();
   const [requests, setRequests] = useState<PosApprovalRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const canApproveType = useCallback((type: PosApprovalType) => {
+    switch (type) {
+      case 'discount': return can('pos.approve.discount');
+      case 'reprint': return can('pos.approve.reprint');
+      case 'cancel': return can('pos.approve.cancel');
+      case 'void': return can('pos.approve.void');
+      default: return false;
+    }
+  }, [can]);
+
   const canApprove =
-    user?.role === 'super_admin' ||
-    user?.role === 'owner' ||
-    user?.role === 'branch_manager';
+    can('pos.approve.discount') ||
+    can('pos.approve.reprint') ||
+    can('pos.approve.cancel') ||
+    can('pos.approve.void');
 
   const loadRequests = useCallback(async () => {
     setLoading(true);
@@ -66,32 +79,18 @@ export function usePosApprovals() {
 
   useEffect(() => {
     void loadRequests();
-
-    const unsubscribe = subscribeToApprovals(() => {
-      void loadRequests();
-    });
-
+    const unsubscribe = subscribeToApprovals(() => void loadRequests());
     return unsubscribe;
   }, [loadRequests]);
 
-  const handleApprove = async (id: string, note?: string) => {
+  const respond = async (id: string, status: 'approved' | 'rejected', note?: string) => {
     if (!user) return false;
-    const ok = await respondToApprovalRequest({
-      request_id: id,
-      status: 'approved',
-      user_id: user.id,
-      user_name: user.full_name || user.username || user.email || 'المشرف',
-      response_note: note,
-    });
-    if (ok) void loadRequests();
-    return ok;
-  };
+    const request = requests.find((r) => r.id === id);
+    if (!request || !canApproveType(request.request_type)) return false;
 
-  const handleReject = async (id: string, note?: string) => {
-    if (!user) return false;
     const ok = await respondToApprovalRequest({
       request_id: id,
-      status: 'rejected',
+      status,
       user_id: user.id,
       user_name: user.full_name || user.username || user.email || 'المشرف',
       response_note: note,
@@ -108,9 +107,10 @@ export function usePosApprovals() {
     pendingRequests,
     pendingCount,
     canApprove,
+    canApproveType,
     loading,
     refresh: loadRequests,
-    approve: handleApprove,
-    reject: handleReject,
+    approve: (id: string, note?: string) => respond(id, 'approved', note),
+    reject: (id: string, note?: string) => respond(id, 'rejected', note),
   };
 }

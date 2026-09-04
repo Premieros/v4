@@ -13,11 +13,21 @@ describe.skipIf(skip)('process_sale linked-order settlement (045 C1)', () => {
   const productId = randomUUID();
   const unitId = randomUUID();
   const tableId = randomUUID();
+  const adminId = randomUUID();
 
   const itemJson = (qty: number, price = 100) =>
     JSON.stringify([
       { product_id: productId, unit_name: 'piece', quantity: qty, unit_price: price, discount_amount: 0, bonus_quantity: 0, total: qty * price },
     ]);
+
+  async function asAdmin<T>(fn: () => Promise<T>): Promise<T> {
+    await client.query(`SELECT set_config('app.user_id', $1, true)`, [adminId]);
+    await client.query(`SET LOCAL ROLE authenticated`);
+    try { return await fn(); } finally {
+      await client.query('RESET ROLE').catch(() => {});
+      await client.query('RESET app.user_id').catch(() => {});
+    }
+  }
 
   async function insertOrder(status: string, opts: { tableId?: string | null; branchId?: string; orderType?: string } = {}): Promise<string> {
     const r = await client.query<{ id: string }>(
@@ -29,12 +39,14 @@ describe.skipIf(skip)('process_sale linked-order settlement (045 C1)', () => {
   }
 
   async function settle(invoiceNumber: string, orderId: string | null, opts: { tableId?: string | null } = {}) {
-    const res = await client.query<{ r: { success: boolean; error?: string; sale_id?: string; detail?: string } }>(
-      `SELECT public.process_sale($1, $2, $3, NULL, NULL, 100, 0, 'amount', 0, 0, 100, 100, 'cash', 'completed',
-         $4::jsonb, NULL, 'takeaway', $5, $6) AS r`,
-      [invoiceNumber, branchId, warehouseId, itemJson(1), opts.tableId ?? null, orderId],
-    );
-    return res.rows[0].r;
+    return asAdmin(async () => {
+      const res = await client.query<{ r: { success: boolean; error?: string; sale_id?: string; detail?: string } }>(
+        `SELECT public.process_sale($1, $2, $3, NULL, NULL, 100, 0, 'amount', 0, 0, 100, 100, 'cash', 'completed',
+           $4::jsonb, NULL, 'takeaway', $5, $6) AS r`,
+        [invoiceNumber, branchId, warehouseId, itemJson(1), opts.tableId ?? null, orderId],
+      );
+      return res.rows[0].r;
+    });
   }
 
   async function saleCount(invoicePrefix: string): Promise<number> {
@@ -57,6 +69,8 @@ describe.skipIf(skip)('process_sale linked-order settlement (045 C1)', () => {
     client = openDb(dbUrl!);
     await client.connect();
     await client.query('BEGIN');
+    await client.query(`ALTER TABLE public.users DISABLE TRIGGER trg_users_role_guard`);
+    await client.query(`INSERT INTO public.users (id, email, full_name, role, is_active) VALUES ($1, $2, 'Settlement Admin', 'super_admin', true)`, [adminId, `settle-${randomUUID()}@test.local`]);
 
     await client.query(`INSERT INTO public.branches (id, name) VALUES ($1, $2)`, [branchId, '045 C1 Branch']);
     await client.query(

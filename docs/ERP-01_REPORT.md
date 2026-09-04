@@ -52,7 +52,7 @@
 **ما يلزم بالضبط لتشغيلها محليًا:**
 
 1. ملف `.env` (git-ignored، يُقرؤه Vite تلقائيًا) يحتوي:
-   - `VITE_SUPABASE_URL` — **يجب أن يكون مساويًا حرفيًا** `https://lwnsdsncmlsroiswgoga.supabase.co` لأنه ثابت `SUPABASE_ORIGIN` الذي تلتقطه `page.route()` في `pos-actions` و`dashboard-navigation`؛ أي قيمة مختلفة تعني عدم اعتراض الشبكة.
+   - `VITE_SUPABASE_URL` — **يجب أن يكون مساويًا حرفيًا** `https://cuitndfayupfysejlpda.supabase.co` لأنه ثابت `SUPABASE_ORIGIN` الذي تلتقطه `page.route()` في `pos-actions` و`dashboard-navigation`؛ أي قيمة مختلفة تعني عدم اعتراض الشبكة.
    - `VITE_SUPABASE_ANON_KEY` — أي قيمة غير فارغة تكفي للتدفقات المقلّدة بالكامل (CI يستخدم مفتاح النشر العام الحقيقي من `.github/workflows`).
 2. `npm run build` مع توفر القيمتين أعلاه (يُنتج `dist/`).
 3. `npm run preview -- --host 127.0.0.1 --port 4173` — يشغّله Playwright تلقائيًا عبر `webServer` في `playwright.config.ts`، لذلك ليس خطوة يدوية.

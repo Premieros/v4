@@ -3,22 +3,16 @@
 // End-to-end regression test for the subscription feature (trial + plans).
 //
 // Exercises the exact RPC surface the frontend calls, against the configured
-// database, and rolls everything back so the DB is left untouched:
-//   register_branch (anon) -> branch/warehouse/settings/trial/owner created
-//   subscription_status / subscription_expired during trial
-//   process_sale gate returns SUBSCRIPTION_EXPIRED once the trial ends
-//   activate_subscription (admin) clears the gate
-//   super_admin is exempt from the gate
-//
-//   node scripts/db/e2e-subscriptions.mjs
-//
-// Requires SUPABASE_DB_URL (or DATABASE_URL / POSTGRES_URL) in .env.
+// database, and rolls everything back so the DB is left untouched.
+// Database isolation is mandatory: only the v4 Supabase project or localhost
+// for local/CI testing is accepted.
 // ============================================================================
 
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { assertAllowedDatabaseUrl } from './project-isolation.js';
 
 const __dirname = resolve(fileURLToPath(import.meta.url), '..');
 const ROOT = resolve(__dirname, '..', '..');
@@ -47,9 +41,17 @@ function buildSsl(connectionString) {
 }
 
 const env = loadEnv(join(ROOT, '.env'));
-const dbUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL || env.SUPABASE_DB_URL || env.DATABASE_URL || env.POSTGRES_URL;
-if (!dbUrl) {
+const rawDbUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL || env.SUPABASE_DB_URL || env.DATABASE_URL || env.POSTGRES_URL;
+if (!rawDbUrl) {
   console.error('ERROR: no database URL found. Add SUPABASE_DB_URL (or DATABASE_URL) to .env.');
+  process.exit(1);
+}
+
+let dbUrl;
+try {
+  dbUrl = assertAllowedDatabaseUrl(rawDbUrl, { allowLocal: true, label: 'subscription E2E database URL' });
+} catch (error) {
+  console.error(`ERROR: ${error.message}`);
   process.exit(1);
 }
 
@@ -73,7 +75,6 @@ async function run() {
   await client.query('BEGIN');
   await client.query('SET ROLE anon');
 
-  // 1) Self-service registration (as the anon role — what /register calls)
   const reg = await client.query(
     'SELECT public.register_branch($1,$2,$3,$4,$5,$6,$7,$8) AS res',
     ['E2E Store', 'E2E Owner', email, 'secret123', 'E2E Store EN', '01000000000', 'Cairo', 'EGP'],
@@ -106,13 +107,11 @@ async function run() {
   const ident = await client.query("SELECT provider, provider_id FROM auth.identities WHERE user_id=$1", [u.rows[0].id]);
   ok('email identity created', ident.rowCount === 1 && ident.rows[0]?.provider === 'email', JSON.stringify(ident.rows[0]));
 
-  // 2) Status helpers during trial
   const st = await client.query('SELECT public.subscription_status($1) AS res', [bid]);
   ok('status reports trial', st.rows[0].res?.status === 'trial', JSON.stringify(st.rows[0].res));
   const ex = await client.query('SELECT public.subscription_expired($1) AS res', [bid]);
   ok('not expired during trial', ex.rows[0].res === false);
 
-  // 3) Force-expire, then the sale gate must block a normal user
   await client.query("UPDATE public.branch_subscriptions SET trial_ends_at = now() - interval '1 day' WHERE branch_id=$1", [bid]);
   const ex2 = await client.query('SELECT public.subscription_expired($1) AS res', [bid]);
   ok('expired after trial ends', ex2.rows[0].res === true);
@@ -122,7 +121,6 @@ async function run() {
   );
   ok('sale blocked on expired subscription (SUBSCRIPTION_EXPIRED)', sale.rows[0].res?.error === 'SUBSCRIPTION_EXPIRED', JSON.stringify(sale.rows[0].res));
 
-  // 4) Simulate an authenticated super_admin and activate a paid plan
   const adminId = '00000000-0000-0000-0000-0000000000ab';
   await client.query("SELECT set_config('app.register_branch','on',true)");
   await client.query(
@@ -150,7 +148,6 @@ async function run() {
   );
   ok('sale gate cleared after activation (falls through to PRODUCT_NOT_FOUND)', sale2.rows[0].res?.error === 'PRODUCT_NOT_FOUND', JSON.stringify(sale2.rows[0].res));
 
-  // 5) super_admin is exempt from the gate even when cancelled/expired
   await client.query("UPDATE public.branch_subscriptions SET status='cancelled', current_period_ends_at=NULL WHERE branch_id=$1", [bid]);
   const sale3 = await client.query(
     "SELECT public.process_sale('E2E-3', $1, NULL, NULL, NULL, 10, 0, 'percentage', 0, 0, 10, 10, 'cash', 'completed', '[{\"product_id\":\"00000000-0000-0000-0000-000000000000\",\"quantity\":1}]'::jsonb) AS res",

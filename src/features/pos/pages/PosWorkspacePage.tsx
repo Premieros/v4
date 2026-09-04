@@ -533,6 +533,7 @@ export function PosWorkspacePage() {
     setPreselectedTableId(null);
     setPanel(null);
     setMobileOrderOpen(false);
+    setViewMode('products');
   };
 
   const handleWizardResume = (order: Order, pay = false) => {
@@ -1231,4 +1232,3 @@ export function PosWorkspacePage() {
     </div>
   );
 }
-

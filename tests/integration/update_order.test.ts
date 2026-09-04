@@ -90,6 +90,7 @@ describe.skipIf(skip)('update_order + occupancy guards (046 C2/H2/M4)', () => {
     await client.query('BEGIN');
 
     await client.query(`ALTER TABLE public.users DISABLE TRIGGER trg_users_role_guard`);
+    await client.query(`UPDATE public.roles SET permissions = permissions || '["pos.order.create","pos.order.edit","pos.order.hold","pos.payment.collect","floor_plan.manage"]'::jsonb WHERE role = 'cashier'`);
     await client.query(`INSERT INTO public.organizations (id, name, slug) VALUES ($1, $2, $3)`, [orgId, '046 Org', `046-${randomUUID().slice(0, 8)}`]);
     await client.query(`INSERT INTO public.branches (id, name, organization_id) VALUES ($1, $2, $3)`, [branchId, '046 C2 Branch', orgId]);
     await client.query(`INSERT INTO public.warehouses (id, name, branch_id, is_active) VALUES ($1, $2, $3, true)`, [whId, '046 WH', branchId]);
@@ -99,6 +100,7 @@ describe.skipIf(skip)('update_order + occupancy guards (046 C2/H2/M4)', () => {
     await client.query(`INSERT INTO public.dining_tables (id, name, branch_id, capacity, status) VALUES ($1, $2, $3, 4, 'vacant')`, [tableB, 'T-B', branchId]);
     await client.query(`INSERT INTO public.users (id, email, full_name, role, branch_id, is_active) VALUES ($1, $2, $3, 'cashier', $4, true)`, [cashierId, `c2-${randomUUID()}@test.local`, 'Cashier', branchId]);
     await client.query(`INSERT INTO public.organization_members (organization_id, user_id, membership_role, is_active) VALUES ($1, $2, 'member', true)`, [orgId, cashierId]);
+    await client.query(`INSERT INTO public.user_branch_access (user_id, branch_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [cashierId, branchId]);
     await client.query(`INSERT INTO public.shifts (branch_id, cashier_id, opening_amount, status) VALUES ($1, $2, 0, 'open')`, [branchId, cashierId]);
     await client.query(`SELECT public.ensure_chart_of_accounts($1)`, [branchId]);
     await client.query(`SELECT public.seed_account_mappings($1)`, [branchId]);
@@ -124,10 +126,8 @@ describe.skipIf(skip)('update_order + occupancy guards (046 C2/H2/M4)', () => {
     expect(updated.success).toBe(true);
     if (!updated.success) throw new Error(JSON.stringify(updated));
 
-    // Still exactly one order.
     expect(await orderCount()).toBe(1);
 
-    // Items were replaced (2 units instead of 1).
     const items = await client.query(
       `SELECT quantity::text AS q FROM public.order_items WHERE order_id = $1`,
       [orderId],

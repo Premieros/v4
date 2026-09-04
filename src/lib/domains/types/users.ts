@@ -7,6 +7,7 @@ export type Role =
   | 'super_admin'
   | 'owner'
   | 'branch_manager'
+  | 'captain'
   | 'cashier'
   | 'warehouse_manager'
   | 'accountant'

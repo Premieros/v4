@@ -21,8 +21,8 @@ export function useUserBranches() {
       return;
     }
 
+    setLoading(true);
     try {
-      // 1. Fetch all active branches
       const { data: allB, error: allErr } = await supabase
         .from('branches')
         .select('*')
@@ -30,7 +30,9 @@ export function useUserBranches() {
         .order('name');
 
       if (allErr) {
-        console.warn('Could not fetch all branches:', allErr.message);
+        setAccessibleBranches([]);
+        setAllBranches([]);
+        return;
       }
 
       const allList = (allB as Branch[]) || [];
@@ -38,24 +40,32 @@ export function useUserBranches() {
 
       if (isAdmin) {
         setAccessibleBranches(allList);
-      } else {
-        // Fetch branches allowed for this user via RPC
-        const { data: accessData, error: accessErr } = await supabase.rpc('get_user_branch_access', {
-          p_user_id: user.id,
-        });
-
-        if (!accessErr && Array.isArray(accessData) && accessData.length > 0) {
-          const allowedIds = new Set(accessData.map((a: { branch_id: string }) => a.branch_id));
-          const filtered = allList.filter((b) => allowedIds.has(b.id));
-          setAccessibleBranches(filtered.length > 0 ? filtered : allList.filter((b) => b.id === user.branch_id));
-        } else if (user.branch_id) {
-          setAccessibleBranches(allList.filter((b) => b.id === user.branch_id));
-        } else {
-          setAccessibleBranches(allList);
-        }
+        return;
       }
+
+      // Permission does not grant branch access. For every non-Super Admin
+      // account, only explicit user_branch_access rows are authoritative here.
+      // This deliberately ignores legacy org-role expansion from the old RPC.
+      const { data: grants, error: grantsError } = await supabase
+        .from('user_branch_access')
+        .select('branch_id')
+        .eq('user_id', user.id);
+
+      if (grantsError || !Array.isArray(grants)) {
+        setAccessibleBranches([]);
+        return;
+      }
+
+      const allowedIds = new Set(
+        grants
+          .map((grant: { branch_id?: string | null }) => grant.branch_id)
+          .filter((id): id is string => Boolean(id))
+      );
+      setAccessibleBranches(allList.filter((branch) => allowedIds.has(branch.id)));
     } catch (err) {
       console.error('Failed to load accessible branches:', err);
+      setAccessibleBranches([]);
+      setAllBranches([]);
     } finally {
       setLoading(false);
     }
@@ -65,23 +75,24 @@ export function useUserBranches() {
     void fetchBranches();
   }, [fetchBranches]);
 
-  // Ensure activeBranchId is valid for non-admin users
   useEffect(() => {
-    if (loading || accessibleBranches.length === 0) return;
-    if (!isAdmin) {
-      const isValid = accessibleBranches.some((b) => b.id === activeBranchId);
-      if (!isValid) {
-        // Default to first accessible branch or user's assigned branch
-        const fallback = accessibleBranches.find((b) => b.id === user?.branch_id)?.id || accessibleBranches[0]?.id;
-        if (fallback) setActiveBranchId(fallback);
-      }
+    if (loading || isAdmin) return;
+
+    if (accessibleBranches.length === 0) {
+      if (activeBranchId) setActiveBranchId(null);
+      return;
     }
-  }, [loading, accessibleBranches, activeBranchId, isAdmin, user?.branch_id, setActiveBranchId]);
+
+    const isValid = accessibleBranches.some((branch) => branch.id === activeBranchId);
+    if (!isValid) {
+      setActiveBranchId(accessibleBranches[0].id);
+    }
+  }, [loading, accessibleBranches, activeBranchId, isAdmin, setActiveBranchId]);
 
   const canSwitch = isAdmin || accessibleBranches.length > 1;
-
-  const currentBranch = accessibleBranches.find((b) => b.id === activeBranchId) ||
-    allBranches.find((b) => b.id === activeBranchId) || null;
+  const currentBranch = accessibleBranches.find((branch) => branch.id === activeBranchId)
+    || (isAdmin ? allBranches.find((branch) => branch.id === activeBranchId) : undefined)
+    || null;
 
   return {
     accessibleBranches,

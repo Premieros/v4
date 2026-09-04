@@ -31,8 +31,7 @@ describe.skipIf(skipLocal)('PHASE 4 security contract', () => {
     await client?.end().catch(() => {});
   });
 
-  it('keeps admin visibility across both branches', async () => {
-    // Super admin is in both orgs → sees both products
+  it('keeps super-admin global visibility and does not grant owner branch access implicitly', async () => {
     const sa = await runAs(
       client,
       ids.users.super_admin,
@@ -42,7 +41,9 @@ describe.skipIf(skipLocal)('PHASE 4 security contract', () => {
     expect(sa.error).toBeUndefined();
     expect(sa.rows?.[0]?.n).toBe(2);
 
-    // Owner is only in orgA → sees only prodA
+    // Organization membership and the owner label do not authorize branch data.
+    // Owner must receive an explicit user_branch_access grant like every other
+    // non-super-admin user.
     const ow = await runAs(
       client,
       ids.users.owner,
@@ -50,7 +51,7 @@ describe.skipIf(skipLocal)('PHASE 4 security contract', () => {
       [ids.prodA, ids.prodB],
     );
     expect(ow.error).toBeUndefined();
-    expect(ow.rows?.[0]?.n).toBe(1);
+    expect(ow.rows?.[0]?.n).toBe(0);
   });
 
   it('keeps branch staff isolated for read and write', async () => {
