@@ -1,15 +1,16 @@
 name: Sanitize Supabase references
 
 on:
-  push:
-    branches:
-      - fix/products-permission-branch-rules-20260904
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize]
 
 permissions:
   contents: write
 
 jobs:
   sanitize:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/products-permission-branch-rules-20260904'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
