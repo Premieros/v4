@@ -28,6 +28,9 @@ jobs:
       - name: Install dependencies
         run: if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
+      - name: Enforce Supabase project isolation
+        run: npm run verify:supabase-isolation
+
       - run: npm run build
         env:
           VITE_SUPABASE_URL: https://cuitndfayupfysejlpda.supabase.co
