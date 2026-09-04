@@ -5,8 +5,9 @@
 -- the kitchen. process_sale must still deduct direct/non-kitchen quantities,
 -- but only the residual quantity that has not already been consumed.
 --
--- This migration patches the current process_sale definition additively instead
--- of copying the full function, so later security/accounting fixes remain intact.
+-- Patch the current process_sale definition additively so later security and
+-- accounting fixes remain intact. The patch anchors to the unique per-line
+-- deduction block itself rather than to a comment that may legitimately change.
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION public.sale_inventory_items_after_kitchen(
@@ -24,8 +25,6 @@ BEGIN
     RETURN '[]'::jsonb;
   END IF;
 
-  -- Direct sales have no kitchen order boundary, so all quantities are due for
-  -- sale-time deduction.
   IF p_order_id IS NULL THEN
     RETURN p_items;
   END IF;
@@ -80,7 +79,6 @@ DO $do$
 DECLARE
   v_src text;
   v_old text;
-  v_marker text;
   v_new text;
 BEGIN
   SELECT pg_get_functiondef(p.oid)
@@ -96,8 +94,8 @@ BEGIN
     RAISE EXCEPTION 'process_sale target signature not found';
   END IF;
 
-  -- This is the per-line unit deduction introduced by
-  -- 20260819120300_route_process_sale_through_unit_inventory.sql.
+  -- Match the unique legacy deduction plus the END LOOP that closes the sale
+  -- item write loop. This avoids relying on a mutable comment after that loop.
   v_old := $old$      v_res := public.deduct_sale_unit_inventory(
         p_branch_id,
         p_warehouse_id,
@@ -109,24 +107,16 @@ BEGIN
         RAISE EXCEPTION 'UNIT_SALE_DEDUCTION_FAILED: %', COALESCE(v_res->>'detail', v_res->>'error', 'unknown');
       END IF;
       v_cogs_total := v_cogs_total + COALESCE((v_res->>'total_cost')::numeric, 0);
+    END LOOP;
 $old$;
 
   IF position(v_old IN v_src) = 0 THEN
     RAISE EXCEPTION 'process_sale unit deduction block changed; refusing unsafe automatic patch';
   END IF;
 
-  -- Remove the per-line deduction. Sale items are still inserted line-by-line;
-  -- inventory is deducted once for the residual aggregate immediately after.
-  v_src := replace(v_src, v_old, '');
+  v_new := $new$    END LOOP;
 
-  v_marker := $marker$    -- ===== WRITE PHASE 2b: settle the validated open/held order =====
-$marker$;
-
-  IF position(v_marker IN v_src) = 0 THEN
-    RAISE EXCEPTION 'process_sale settlement marker changed; refusing unsafe automatic patch';
-  END IF;
-
-  v_new := $new$    -- ===== WRITE PHASE 2a: deduct ONLY inventory not already sent to kitchen =====
+    -- Deduct ONLY inventory not already consumed by Kitchen Send.
     v_res := public.deduct_sale_unit_inventory(
       p_branch_id,
       p_warehouse_id,
@@ -152,13 +142,11 @@ $marker$;
         AND e.entry_type = 'kitchen_send'
         AND e.quantity < 0;
     END IF;
-
 $new$;
 
-  v_src := replace(v_src, v_marker, v_new || v_marker);
+  v_src := replace(v_src, v_old, v_new);
   EXECUTE v_src;
 
-  -- Fail migration if either invariant is not visible in the final function.
   SELECT pg_get_functiondef(p.oid)
   INTO v_src
   FROM pg_proc p
