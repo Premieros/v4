@@ -4,6 +4,7 @@ import * as api from '@/api';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/Toast';
+import { useCan } from '@/lib/permissions';
 import { computePosTotals, computeLineDiscount, type PosPaymentMethod } from '@/lib/posMath';
 import { logAudit } from '@/lib/audit';
 import type { CartItem, Customer, DiningTable, Order, OrderItem, OrderType, Product, ProductComponent, RpcResult, Settings } from '@/lib/types';
@@ -42,7 +43,6 @@ interface PersistResult {
 }
 
 const EMPTY_CART: CartItem[] = [];
-
 const VALID_PAYMENT_METHODS: PosPaymentMethod[] = ['cash', 'card', 'transfer', 'credit'];
 
 export function usePosOrder(input: UsePosOrderInput) {
@@ -51,6 +51,16 @@ export function usePosOrder(input: UsePosOrderInput) {
   const isAr = lang === 'ar';
   const { user } = useAuth();
   const { show } = useToast();
+  const can = useCan();
+
+  const canCreateOrder = can('pos.order.create');
+  const canEditOrder = can('pos.order.edit');
+  const canHoldOrder = can('pos.order.hold');
+  const canSendKitchen = can('pos.order.send_kitchen');
+  const canCollectPayment = can('pos.payment.collect');
+  const canDiscount = can('pos.discount');
+  const canCancelOrder = can('pos.order.cancel');
+  const canApproveVoid = can('pos.approve.void');
 
   const [cart, setCart] = useState<CartItem[]>(EMPTY_CART);
   const [customerId, setCustomerId] = useState('');
@@ -86,16 +96,15 @@ export function usePosOrder(input: UsePosOrderInput) {
 
   const effCurrency = effSettings?.currency || 'EGP';
 
+  // Ownership is contextual information, never an authorization shortcut.
+  // An editor permission may edit another user's open order; a payment-only
+  // cashier may settle it without acquiring edit rights.
   const isOrderOwner = useMemo(() => {
     if (!activeOrderId || !orderCashierId) return true;
-    if (!user?.id) return true;
-    if (orderCashierId === user.id) return true;
-    if (user.role === 'super_admin' || user.role === 'owner' || user.role === 'branch_manager') return true;
-    return false;
-  }, [activeOrderId, orderCashierId, user]);
+    if (!user?.id) return false;
+    return orderCashierId === user.id || canEditOrder;
+  }, [activeOrderId, orderCashierId, user?.id, canEditOrder]);
 
-  // Apply the configured default payment method once settings are loaded,
-  // unless the cashier already picked a method this session.
   useEffect(() => {
     if (paymentTouched.current) return;
     const dm = effSettings?.pos_default_payment_method as PosPaymentMethod;
@@ -147,11 +156,9 @@ export function usePosOrder(input: UsePosOrderInput) {
         } else {
           setOrderCashierName(null);
         }
-        // Repair a legacy 'vacant' row left under an open order, but never
-        // overwrite a manager's 'reserved'/'closed' status.
         if (order.table_id) {
           supabase.from('dining_tables').select('status').eq('id', order.table_id).maybeSingle().then(({ data: tbl }) => {
-            if (!cancelled && tbl && (tbl as { status: string }).status === 'vacant') {
+            if (!cancelled && tbl && (tbl as { status: string }).status === 'vacant' && canEditOrder) {
               api.floorPlan.setTableStatus({ p_table_id: order.table_id as string, p_status: 'occupied' }).catch(() => {});
             }
           });
@@ -163,7 +170,7 @@ export function usePosOrder(input: UsePosOrderInput) {
       })
       .catch(() => { if (!cancelled) setOrderLoading(false); });
     return () => { cancelled = true; };
-  }, [orderId, t, show, isAr]);
+  }, [orderId, t, show, isAr, canEditOrder]);
 
   useEffect(() => {
     if (!tableId) { setActiveTable(null); return; }
@@ -181,21 +188,22 @@ export function usePosOrder(input: UsePosOrderInput) {
   }, [products, sellableStock, stockMap]);
 
   const checkCanModify = useCallback((): boolean => {
-    if (isCashier && !activeShift) {
-      show(isAr ? 'يجب فتح شفت عمل أولاً لبدء تسجيل الطلبات' : 'Please open a shift first to take orders', 'error');
+    const allowed = activeOrderId ? canEditOrder : canCreateOrder;
+    if (!allowed) {
+      show(isAr ? 'ليس لديك صلاحية تعديل هذا الطلب' : 'You do not have permission to edit this order', 'error');
       return false;
     }
-    if (!isOrderOwner) {
+    if (activeOrderId && !isOrderOwner) {
       show(
         isAr
-          ? `هذا الطلب مرتبط بالمستخدم (${orderCashierName || 'كاشير آخر'}). لا يمكن التعديل عليه إلا بواسطة صاحبه أو المشرف.`
-          : `This order belongs to ${orderCashierName || 'another cashier'}. Only the owner or a manager can modify it.`,
+          ? `هذا الطلب مرتبط بالمستخدم (${orderCashierName || 'مستخدم آخر'}).`
+          : `This order belongs to ${orderCashierName || 'another user'}.`,
         'error'
       );
       return false;
     }
     return true;
-  }, [isCashier, activeShift, isOrderOwner, orderCashierName, isAr, show]);
+  }, [activeOrderId, canEditOrder, canCreateOrder, isOrderOwner, orderCashierName, isAr, show]);
 
   const addToCart = useCallback((
     product: Product,
@@ -219,18 +227,15 @@ export function usePosOrder(input: UsePosOrderInput) {
       if (existing && !modifiers.length) {
         return prev.map((i) => (i.product.id === product.id ? { ...i, quantity: i.quantity + quantity } : i));
       }
-      return [
-        ...prev,
-        {
-          product,
-          unit_name: 'piece',
-          quantity,
-          unit_price: product.sale_price,
-          discount_amount: discount,
-          bonus_quantity: 0,
-          modifiers: modifiers.map((m) => ({ name: m.name })),
-        },
-      ];
+      return [...prev, {
+        product,
+        unit_name: 'piece',
+        quantity,
+        unit_price: product.sale_price,
+        discount_amount: discount,
+        bonus_quantity: 0,
+        modifiers: modifiers.map((m) => ({ name: m.name })),
+      }];
     });
   }, [checkCanModify, getStock, recipeMap, cart, show, t]);
 
@@ -262,13 +267,13 @@ export function usePosOrder(input: UsePosOrderInput) {
   }, [checkCanModify]);
 
   const setItemDiscount = useCallback((productId: string, discount: number) => {
-    if (!checkCanModify()) return;
+    if (!canDiscount || !checkCanModify()) return;
     const item = cart.find((i) => i.product.id === productId);
     if (!item) return;
     const lineTotal = item.quantity * item.unit_price;
     const d = computeLineDiscount(lineTotal, discount || 0);
     setCart((prev) => prev.map((i) => (i.product.id === productId ? { ...i, discount_amount: d } : i)));
-  }, [checkCanModify, cart]);
+  }, [canDiscount, checkCanModify, cart]);
 
   const taxRate = effSettings?.tax_enabled ? (effSettings?.tax_rate || 0) : 0;
   const totals = useMemo(
@@ -286,6 +291,7 @@ export function usePosOrder(input: UsePosOrderInput) {
   const { subtotal, discountValue, taxAmount, total, change } = totals;
 
   const switchOrderType = useCallback(async (ot: OrderType) => {
+    if (!checkCanModify()) return;
     if (ot === orderType) return;
     if (activeOrderNumber) {
       show(isAr ? `لا يمكن تغيير نوع طلب نشط (${activeOrderNumber})` : `Cannot change order type of active order (${activeOrderNumber})`, 'error');
@@ -310,9 +316,10 @@ export function usePosOrder(input: UsePosOrderInput) {
       setActiveTable(null);
     }
     setOrderType(ot);
-  }, [orderType, activeOrderNumber, tableId, activeTable, show, t, isAr]);
+  }, [checkCanModify, orderType, activeOrderNumber, tableId, activeTable, show, t, isAr]);
 
   const performDetach = useCallback(async () => {
+    if (!checkCanModify()) return;
     if (activeOrderId) {
       const res = await api.floorPlan.detachOrder({ p_order_id: activeOrderId });
       if (res.error || !(res.data as RpcResult | null)?.success) {
@@ -333,7 +340,7 @@ export function usePosOrder(input: UsePosOrderInput) {
     setTableId(null);
     setActiveTable(null);
     setGuestCount(null);
-  }, [activeOrderId, tableId, show, t]);
+  }, [checkCanModify, activeOrderId, tableId, show, t]);
 
   const detachTable = useCallback(async () => {
     if (!activeTable) return;
@@ -350,7 +357,6 @@ export function usePosOrder(input: UsePosOrderInput) {
     await performDetach();
   }, [isAr, performDetach]);
 
-  // Seamlessly resume an existing table's order without losing any state or creating duplicates
   const resumeTableOrder = useCallback((order: Order, items: OrderItem[], orderProducts: Product[], table: DiningTable) => {
     setActiveOrderId(order.id);
     setActiveOrderNumber(order.order_number);
@@ -360,12 +366,16 @@ export function usePosOrder(input: UsePosOrderInput) {
     setGuestCount(order.guest_count || null);
     setOrderNotes(order.notes || '');
     setCustomerId(order.customer_id || '');
+    setOrderCashierId(order.cashier_id || null);
     const cartItems = orderItemsToCart(items, orderProducts);
     setCart(cartItems);
   }, []);
 
-  // Initialize a new order directly on a selected table
   const startTableOrder = useCallback((table: DiningTable, guests = 2) => {
+    if (!canCreateOrder) {
+      show(isAr ? 'ليس لديك صلاحية إنشاء طلب' : 'You do not have permission to create orders', 'error');
+      return;
+    }
     setCart(EMPTY_CART);
     setActiveOrderId(null);
     setActiveOrderNumber(null);
@@ -376,41 +386,22 @@ export function usePosOrder(input: UsePosOrderInput) {
     setOrderNotes('');
     setDiscountAmount(0);
     setPaidAmount(0);
-  }, []);
+  }, [canCreateOrder, isAr, show]);
 
-  // Move / Transfer order between tables
   const transferOrderToTable = useCallback(async (targetOrderId: string, fromTableId: string, toTableId: string): Promise<boolean> => {
+    if (!canEditOrder) return false;
     try {
-      // Update order table_id
       const { error: ordErr } = await supabase
         .from('orders')
         .update({ table_id: toTableId, updated_at: new Date().toISOString() })
         .eq('id', targetOrderId);
 
-      if (ordErr) {
-        show(ordErr.message, 'error');
-        return false;
-      }
+      if (ordErr) { show(ordErr.message, 'error'); return false; }
 
-      // Free old table
-      await supabase
-        .from('dining_tables')
-        .update({ status: 'vacant', updated_at: new Date().toISOString() })
-        .eq('id', fromTableId);
+      await supabase.from('dining_tables').update({ status: 'vacant', updated_at: new Date().toISOString() }).eq('id', fromTableId);
+      await supabase.from('dining_tables').update({ status: 'occupied', updated_at: new Date().toISOString() }).eq('id', toTableId);
 
-      // Occupy target table
-      await supabase
-        .from('dining_tables')
-        .update({ status: 'occupied', updated_at: new Date().toISOString() })
-        .eq('id', toTableId);
-
-      // Fetch new table details
-      const { data: newTable } = await supabase
-        .from('dining_tables')
-        .select('*')
-        .eq('id', toTableId)
-        .maybeSingle();
-
+      const { data: newTable } = await supabase.from('dining_tables').select('*').eq('id', toTableId).maybeSingle();
       if (activeOrderId === targetOrderId) {
         setTableId(toTableId);
         setActiveTable((newTable as DiningTable) || null);
@@ -422,26 +413,20 @@ export function usePosOrder(input: UsePosOrderInput) {
       show(err instanceof Error ? err.message : 'Transfer failed', 'error');
       return false;
     }
-  }, [activeOrderId, isAr, show]);
+  }, [canEditOrder, activeOrderId, isAr, show]);
 
-  // Void a previously sent item from kitchen with audit logging
   const voidSentItem = useCallback(async (productId: string, voidQuantity: number, reason: string): Promise<boolean> => {
-    if (!activeOrderId) return false;
+    if (!activeOrderId || (!canCancelOrder && !canApproveVoid)) return false;
     try {
-      // Find item in cart
       const item = cart.find((i) => i.product.id === productId);
       if (!item) return false;
 
-      // Deduct quantity or remove from cart
       if (item.quantity <= voidQuantity) {
         setCart((prev) => prev.filter((i) => i.product.id !== productId));
       } else {
-        setCart((prev) =>
-          prev.map((i) => (i.product.id === productId ? { ...i, quantity: i.quantity - voidQuantity } : i))
-        );
+        setCart((prev) => prev.map((i) => (i.product.id === productId ? { ...i, quantity: i.quantity - voidQuantity } : i)));
       }
 
-      // Fetch active branch warehouse to restore stock if ready item
       const warehouseId = await fetchBranchWarehouseId(branchId);
       const timestamp = new Date().toISOString();
 
@@ -458,7 +443,6 @@ export function usePosOrder(input: UsePosOrderInput) {
             .from('inventory')
             .update({ quantity: Number(inv.quantity) + voidQuantity, updated_at: timestamp })
             .eq('id', inv.id);
-
           try {
             await supabase.from('inventory_movements').insert({
               product_id: productId,
@@ -470,36 +454,31 @@ export function usePosOrder(input: UsePosOrderInput) {
               created_at: timestamp,
             });
           } catch {
-            // best effort
+            // best effort legacy movement log
           }
         }
       }
 
-      // Append cancellation note to order notes
       const cancelNote = `[إلغاء: ${voidQuantity} × ${item.product.name} - السبب: ${reason}]`;
       const updatedNotes = orderNotes ? `${orderNotes}\n${cancelNote}` : cancelNote;
       setOrderNotes(updatedNotes);
+      await supabase.from('orders').update({ notes: updatedNotes, updated_at: timestamp }).eq('id', activeOrderId);
 
-      await supabase
-        .from('orders')
-        .update({ notes: updatedNotes, updated_at: timestamp })
-        .eq('id', activeOrderId);
-
-      show(isAr ? `تم إلغاء الصنف (${item.product.name}) بنجاح` : `Item voided successfully`, 'success');
+      show(isAr ? `تم إلغاء الصنف (${item.product.name}) بنجاح` : 'Item voided successfully', 'success');
       return true;
     } catch (err) {
       show(err instanceof Error ? err.message : 'Failed to void item', 'error');
       return false;
     }
-  }, [activeOrderId, cart, branchId, orderNotes, isAr, show]);
+  }, [activeOrderId, canCancelOrder, canApproveVoid, cart, branchId, orderNotes, isAr, show]);
 
-  // Creates or updates the persisted order from the current cart.
   const persistCart = useCallback(async (status: 'open' | 'held'): Promise<PersistResult> => {
     if (!branchId) { show(t('selectBranchFirst'), 'error'); return { ok: false, orderId: null, orderNumber: null }; }
     const itemRows = cartToItems(cart);
     const targetTable = orderType === 'dine_in' ? tableId : null;
 
     if (activeOrderId) {
+      if (!canEditOrder) return { ok: false, orderId: null, orderNumber: null };
       const { data, error } = await api.floorPlan.updateOrder({
         p_order_id: activeOrderId,
         p_order_type: orderType,
@@ -521,6 +500,7 @@ export function usePosOrder(input: UsePosOrderInput) {
       return { ok: true, orderId: activeOrderId, orderNumber: activeOrderNumber };
     }
 
+    if (!canCreateOrder) return { ok: false, orderId: null, orderNumber: null };
     const { data, error } = await api.floorPlan.createOrder({
       p_branch_id: branchId,
       p_order_type: orderType,
@@ -540,12 +520,10 @@ export function usePosOrder(input: UsePosOrderInput) {
     const r = data as RpcResult | null;
     if (!r?.success) { show(r?.detail || r?.error || t('error'), 'error'); return { ok: false, orderId: null, orderNumber: null }; }
     return { ok: true, orderId: r.order_id || null, orderNumber: (r as RpcResult & { order_number?: string }).order_number || null };
-  }, [branchId, activeOrderId, activeOrderNumber, orderType, tableId, customerId, guestCount, orderNotes, cart, subtotal, discountValue, discountType, taxAmount, total, user?.id, show, t]);
+  }, [branchId, activeOrderId, activeOrderNumber, canEditOrder, canCreateOrder, orderType, tableId, customerId, guestCount, orderNotes, cart, subtotal, discountValue, discountType, taxAmount, total, user?.id, show, t]);
 
-  // Holds the current cart: updates the SAME order when resuming (audit C2),
-  // never creating a duplicate.
   const holdOrder = useCallback(async (): Promise<boolean> => {
-    if (!checkCanModify()) return false;
+    if (!canHoldOrder || !checkCanModify()) return false;
     if (cart.length === 0 || completing || orderLoading) return false;
     if (!branchId) { show(t('selectBranchFirst'), 'error'); return false; }
     if (orderType === 'dine_in' && !tableId) {
@@ -561,9 +539,6 @@ export function usePosOrder(input: UsePosOrderInput) {
         const { ok, orderId: newId, orderNumber: newNum } = await persistCart('open');
         if (!ok) return false;
         if (newId) {
-          // New orders are created 'open'; flip to 'held' and verify the flip so a
-          // failure does not silently leave an open order (audit M3). On failure
-          // keep the id so a retry updates it instead of duplicating (audit C2).
           const heldRes = await api.floorPlan.setOrderStatus({ p_order_id: newId, p_status: 'held' });
           if (heldRes.error || !(heldRes.data as RpcResult | null)?.success) {
             show(t('orderHeld') + ': ' + (heldRes.error?.message || (heldRes.data as RpcResult | null)?.detail || (heldRes.data as RpcResult | null)?.error || ''), 'error');
@@ -578,13 +553,10 @@ export function usePosOrder(input: UsePosOrderInput) {
     } finally {
       setCompleting(false);
     }
-  }, [checkCanModify, cart.length, completing, orderLoading, branchId, orderType, tableId, activeOrderId, persistCart, show, t, isAr]);
+  }, [canHoldOrder, checkCanModify, cart.length, completing, orderLoading, branchId, orderType, tableId, activeOrderId, persistCart, show, t, isAr]);
 
-  // Sends unsent cart lines to the kitchen. The first send persists the cart as
-  // an open order so kitchen-send state has an order to attach to; later sends
-  // only snapshot the new lines (idempotent server-side).
   const sendToKitchen = useCallback(async (): Promise<boolean> => {
-    if (!checkCanModify()) return false;
+    if (!canSendKitchen || !checkCanModify()) return false;
     if (cart.length === 0 || completing || orderLoading || kitchenSending) return false;
     if (!branchId) { show(t('selectBranchFirst'), 'error'); return false; }
     if (orderType === 'dine_in' && !tableId) {
@@ -597,10 +569,7 @@ export function usePosOrder(input: UsePosOrderInput) {
       if (!ok || !targetOrderId) return false;
 
       const res = await sendOrderToKitchen({ p_order_id: targetOrderId, p_sent_by: null });
-      if (!res.success) {
-        show(res.detail || res.error || t('error'), 'error');
-        return false;
-      }
+      if (!res.success) { show(res.detail || res.error || t('error'), 'error'); return false; }
       setActiveOrderId(targetOrderId);
       if (targetOrderNumber) setActiveOrderNumber(targetOrderNumber);
       setKitchenSentItems(res.sent || []);
@@ -626,7 +595,7 @@ export function usePosOrder(input: UsePosOrderInput) {
     } finally {
       setKitchenSending(false);
     }
-  }, [checkCanModify, cart.length, completing, orderLoading, kitchenSending, branchId, orderType, tableId, activeOrderNumber, persistCart, effSettings, activeTable, guestCount, t, isAr, show]);
+  }, [canSendKitchen, checkCanModify, cart.length, completing, orderLoading, kitchenSending, branchId, orderType, tableId, activeOrderNumber, persistCart, effSettings, activeTable, guestCount, t, isAr, show]);
 
   const printKitchenTicket = useCallback(() => {
     if (cart.length === 0 || !effSettings) return;
@@ -643,7 +612,16 @@ export function usePosOrder(input: UsePosOrderInput) {
   }, [cart, effSettings, activeOrderNumber, activeTable, orderType, guestCount, t, isAr]);
 
   const completeSale = useCallback(async (): Promise<boolean> => {
-    if (!checkCanModify()) return false;
+    // Settlement is deliberately independent from order-edit ownership.
+    // A cashier may pay a Captain's existing order but cannot edit its lines.
+    if (!canCollectPayment) {
+      show(isAr ? 'ليس لديك صلاحية تحصيل الطلب' : 'You do not have payment permission', 'error');
+      return false;
+    }
+    if (!activeOrderId && !canCreateOrder) {
+      show(isAr ? 'اختر طلبًا مفتوحًا للدفع' : 'Select an open order to pay', 'error');
+      return false;
+    }
     if (cart.length === 0 || completing) return false;
     if (!branchId) { show(t('selectBranchFirst'), 'error'); return false; }
     if (isCashier && !activeShift) { show(t('shiftRequired'), 'error'); return false; }
@@ -653,9 +631,14 @@ export function usePosOrder(input: UsePosOrderInput) {
     }
     setCompleting(true);
     try {
-      for (const item of cart) {
-        const stock = getStock(item.product.id);
-        if (stock < item.quantity) { show(`${item.product.name}: ${t('insufficientStock')} (${stock})`, 'error'); return false; }
+      // Do not reject an already kitchen-consumed quantity just because the
+      // remaining legacy product stock map is lower. Backend unit inventory is
+      // authoritative and payment deducts only the residual unsent quantity.
+      if (!activeOrderId) {
+        for (const item of cart) {
+          const stock = getStock(item.product.id);
+          if (stock < item.quantity) { show(`${item.product.name}: ${t('insufficientStock')} (${stock})`, 'error'); return false; }
+        }
       }
 
       const warehouseId = await fetchBranchWarehouseId(branchId);
@@ -725,7 +708,7 @@ export function usePosOrder(input: UsePosOrderInput) {
     } finally {
       setCompleting(false);
     }
-  }, [checkCanModify, cart, completing, branchId, isCashier, activeShift, orderType, tableId, getStock, paymentMethod, total, paidAmount, customerId, subtotal, discountValue, discountType, taxAmount, change, activeOrderId, activeOrderNumber, guestCount, customers, activeTable, effSettings, lang, isAr, show, t]);
+  }, [canCollectPayment, canCreateOrder, activeOrderId, cart, completing, branchId, isCashier, activeShift, orderType, tableId, getStock, paymentMethod, total, paidAmount, customerId, subtotal, discountValue, discountType, taxAmount, change, activeOrderNumber, guestCount, customers, activeTable, effSettings, lang, isAr, show, t]);
 
   const printReceipt = useCallback(async () => {
     if (!lastReceipt || !effSettings) return;
@@ -735,8 +718,6 @@ export function usePosOrder(input: UsePosOrderInput) {
 
   const closeReceipt = useCallback(() => setReceiptSaleId(null), []);
 
-  // Full workspace reset: used when switching branches so no order/cart state
-  // from the previous branch leaks into the new one.
   const resetWorkspace = useCallback(() => {
     setCart(EMPTY_CART);
     setCustomerId('');
@@ -749,6 +730,8 @@ export function usePosOrder(input: UsePosOrderInput) {
     setActiveOrderId(null);
     setActiveOrderNumber(null);
     setActiveTable(null);
+    setOrderCashierId(null);
+    setOrderCashierName(null);
     setCheckoutOpen(false);
   }, []);
 
