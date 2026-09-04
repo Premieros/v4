@@ -12,12 +12,24 @@ describe.skipIf(skip)('process_sale authoritative pricing (D13)', () => {
   const warehouseId = randomUUID();
   const productId = randomUUID();
   const unitId = randomUUID();
+  const adminId = randomUUID();
   const invoiceNumber = `D13-TEST-${Date.now()}`;
+
+  async function asAdmin<T>(fn: () => Promise<T>): Promise<T> {
+    await client.query(`SELECT set_config('app.user_id', $1, true)`, [adminId]);
+    await client.query(`SET LOCAL ROLE authenticated`);
+    try { return await fn(); } finally {
+      await client.query('RESET ROLE').catch(() => {});
+      await client.query('RESET app.user_id').catch(() => {});
+    }
+  }
 
   beforeAll(async () => {
     client = openDb(dbUrl!);
     await client.connect();
     await client.query('BEGIN');
+    await client.query(`ALTER TABLE public.users DISABLE TRIGGER trg_users_role_guard`);
+    await client.query(`INSERT INTO public.users (id, email, full_name, role, is_active) VALUES ($1, $2, 'Pricing Admin', 'super_admin', true)`, [adminId, `pricing-${randomUUID()}@test.local`]);
     await client.query(`INSERT INTO public.branches (id, name) VALUES ($1, $2)`, [branchId, 'D13 Test Branch']);
     await client.query(`INSERT INTO public.warehouses (id, name, branch_id, is_active) VALUES ($1, $2, $3, true)`, [warehouseId, 'D13 Test Warehouse', branchId]);
     await client.query(`INSERT INTO public.products (id, name, branch_id, sale_price, cost_price, is_active) VALUES ($1, $2, $3, 100, 50, true)`, [productId, 'D13 Test Product', branchId]);
@@ -41,11 +53,11 @@ describe.skipIf(skip)('process_sale authoritative pricing (D13)', () => {
   });
 
   it('books catalog price, not the client-supplied price', async () => {
-    const res = await client.query(
+    const res = await asAdmin(() => client.query(
       `SELECT public.process_sale($1, $2, $3, NULL, NULL, 2, 0, 'amount', 0, 0, 2, 200, 'cash', 'completed',
          $4::jsonb) AS r`,
       [invoiceNumber, branchId, warehouseId, JSON.stringify([{ product_id: productId, unit_name: 'piece', quantity: 2, unit_price: 1, discount_amount: 0, bonus_quantity: 0, total: 2 }])],
-    );
+    ));
     const r = res.rows[0].r;
     expect(r.success).toBe(true);
     if (!r.success) throw new Error(JSON.stringify(r));
@@ -71,10 +83,10 @@ describe.skipIf(skip)('process_sale authoritative pricing (D13)', () => {
 
   it('rejects a discount that exceeds the line total (clamped server-side)', async () => {
     const inv2 = `${invoiceNumber}-B`;
-    const res = await client.query(
+    const res = await asAdmin(() => client.query(
       `SELECT public.process_sale($1, $2, $3, NULL, NULL, 0, 0, 'amount', 0, 0, 0, 0, 'cash', 'completed', $4::jsonb) AS r`,
       [inv2, branchId, warehouseId, JSON.stringify([{ product_id: productId, unit_name: 'piece', quantity: 1, unit_price: 100, discount_amount: 500, bonus_quantity: 0, total: -400 }])],
-    );
+    ));
     const r = res.rows[0].r;
     expect(r.success).toBe(true);
     if (!r.success) throw new Error(JSON.stringify(r));
